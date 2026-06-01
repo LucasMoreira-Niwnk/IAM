@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login | Casa &amp; Terra IAM</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="login-page">
+    <main class="login-shell">
+      <section class="login-visual" aria-label="Resumo do IAM">
+        <div class="brand login-brand">
+          <div class="brand-mark casa-terra-mark" aria-hidden="true">CT</div>
+          <div>
+            <strong>Casa &amp; Terra</strong>
+            <span>IAM Corporativo</span>
+          </div>
+        </div>
+
+        <div class="login-copy">
+          <p class="eyebrow">Acesso corporativo</p>
+          <h1>Identidades protegidas para a operacao Casa &amp; Terra.</h1>
+          <p>
+            Entre com sua conta corporativa para localizar usuarios, executar mudancas no AD e
+            acompanhar eventos criticos do atendimento.
+          </p>
+        </div>
+
+        <div class="login-insights" aria-label="Indicadores de seguranca">
+          <article>
+            <span>AD</span>
+            <strong>Sincronizado</strong>
+          </article>
+          <article>
+            <span>LDAP</span>
+            <strong>Autenticacao</strong>
+          </article>
+          <article>
+            <span>Permissoes</span>
+            <strong>Por operador</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="login-panel" aria-label="Formulario de login">
+        <form class="login-card" action="index.html">
+          <div class="login-heading">
+            <p class="eyebrow">Entrar</p>
+            <h2>Bem-vindo de volta</h2>
+            <span>Use suas credenciais do Active Directory para continuar.</span>
+          </div>
+
+          <label class="field">
+            <span>E-mail ou usuario</span>
+            <input type="text" name="username" autocomplete="username" placeholder="usuario@empresa.com" required />
+          </label>
+
+          <label class="field">
+            <span>Senha</span>
+            <input type="password" name="password" autocomplete="current-password" placeholder="Sua senha" required />
+          </label>
+
+          <div class="login-options">
+            <label class="check-option">
+              <input type="checkbox" name="remember" />
+              <span>Manter conectado</span>
+            </label>
+            <a href="#" aria-label="Ajuda com senha do AD">Problema com senha do AD</a>
+          </div>
+
+          <button class="primary-button login-submit" type="submit">Entrar no IAM</button>
+
+          <div class="separator"><span>ou</span></div>
+
+          <button class="ghost-button ldap-button" type="button" data-login-action="ldap">
+            Validar acesso via LDAP
+          </button>
+
+          <p class="login-note">
+            O login depende do grupo GG-IAM-OPERADORES no AD. As permissoes dentro da ferramenta sao
+            liberadas por um administrador.
+          </p>
+        </form>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="login.js"></script>
+  </body>
+</html>

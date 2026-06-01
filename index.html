@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Casa &amp; Terra IAM</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Navegacao principal">
+        <div class="brand">
+          <div class="brand-mark casa-terra-mark" aria-hidden="true">CT</div>
+          <div>
+            <strong>Casa &amp; Terra</strong>
+            <span>IAM Corporativo</span>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Modulos">
+          <button class="nav-item is-active" type="button" data-view="dashboard">
+            <span class="nav-icon" aria-hidden="true">H</span>
+            Dashboard
+          </button>
+          <button class="nav-item" type="button" data-view="identities">
+            <span class="nav-icon" aria-hidden="true">U</span>
+            Identidades
+          </button>
+          <button class="nav-item" type="button" data-view="access">
+            <span class="nav-icon" aria-hidden="true">A</span>
+            Grupos AD
+          </button>
+          <button class="nav-item" type="button" data-view="critical">
+            <span class="nav-icon" aria-hidden="true">C</span>
+            Criticos
+          </button>
+          <button class="nav-item" type="button" data-view="operators">
+            <span class="nav-icon" aria-hidden="true">O</span>
+            Operadores
+          </button>
+          <button class="nav-item" type="button" data-view="audit">
+            <span class="nav-icon" aria-hidden="true">L</span>
+            Auditoria
+          </button>
+        </nav>
+
+        <section class="sidebar-panel" aria-label="Sincronizacao AD">
+          <span class="panel-label">Active Directory</span>
+          <strong>Sincronizacao pronta</strong>
+          <p>Ultima leitura: hoje, 08:42</p>
+          <button class="ghost-button" type="button" data-action="sync">Sincronizar agora</button>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Ambiente corporativo</p>
+            <h1>Operacao AD Service Desk</h1>
+          </div>
+          <div class="topbar-actions">
+            <label class="search">
+              <span aria-hidden="true">S</span>
+              <input id="global-search" type="search" placeholder="Buscar usuario ou grupo do AD" />
+            </label>
+            <button class="icon-button" type="button" title="Notificacoes" aria-label="Notificacoes">!</button>
+            <button class="primary-button" type="button" data-view="identities">Localizar usuario</button>
+          </div>
+        </header>
+
+        <section class="status-strip" aria-label="Indicadores principais">
+          <article>
+            <span>Identidades ativas</span>
+            <strong id="metric-users">0</strong>
+            <small>Contas habilitadas</small>
+          </article>
+          <article>
+            <span>Usuarios criticos</span>
+            <strong id="metric-privileged">0</strong>
+            <small>Permissoes no AD</small>
+          </article>
+          <article>
+            <span>Operacoes AD hoje</span>
+            <strong id="metric-operations">0</strong>
+            <small>Atendimento Service Desk</small>
+          </article>
+          <article>
+            <span>Operadores IAM</span>
+            <strong id="metric-operators">0</strong>
+            <small>Permissoes internas</small>
+          </article>
+        </section>
+
+        <section class="workspace">
+          <div class="content-panel" id="view-dashboard" data-panel="dashboard">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Visao geral</p>
+                <h2>Operacao IAM</h2>
+              </div>
+              <div class="segmented" role="tablist" aria-label="Periodo">
+                <button class="is-selected" type="button">24h</button>
+                <button type="button">7d</button>
+                <button type="button">30d</button>
+              </div>
+            </div>
+
+            <div class="dashboard-grid">
+              <section class="wide-module">
+                <div class="module-header">
+                  <h3>Fila operacional AD</h3>
+                  <button class="text-button" type="button" data-view-link="identities">Abrir identidades</button>
+                </div>
+                <div class="review-list" id="review-list"></div>
+              </section>
+
+              <section class="side-module">
+                <div class="module-header">
+                  <h3>Indicadores do diretorio</h3>
+                </div>
+                <div class="risk-bars" id="risk-bars"></div>
+              </section>
+            </div>
+          </div>
+
+          <div class="content-panel is-hidden" id="view-identities" data-panel="identities">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Diretorio</p>
+                <h2>Identidades</h2>
+              </div>
+              <button class="primary-button" type="button" data-action="invite-user">Criar usuario no AD</button>
+            </div>
+            <div class="table-tools">
+              <div class="filters" aria-label="Filtros de identidade">
+                <button class="chip is-active" type="button" data-filter="all">Todos</button>
+                <button class="chip" type="button" data-filter="active">Ativos</button>
+                <button class="chip" type="button" data-filter="review">Em revisao</button>
+                <button class="chip" type="button" data-filter="blocked">Bloqueados</button>
+                <button class="chip" type="button" data-filter="disabled">Desabilitados</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Usuario</th>
+                    <th>Departamento</th>
+                    <th>Origem</th>
+                    <th>Status</th>
+                    <th>Criticidade</th>
+                    <th>Grupos</th>
+                    <th>Acao</th>
+                  </tr>
+                </thead>
+                <tbody id="identity-table"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="content-panel is-hidden" id="view-identity-detail" data-panel="identity-detail">
+            <div class="detail-toolbar">
+              <button class="ghost-button" type="button" data-view-link="identities">Voltar para identidades</button>
+              <div class="detail-actions">
+                <button class="ghost-button" type="button" data-identity-action="review">Iniciar revisao</button>
+                <button class="ghost-button" type="button" data-identity-action="sessions">Encerrar sessoes</button>
+                <button class="ghost-button" type="button" data-identity-action="password">Alterar senha</button>
+                <button class="ghost-button" type="button" data-identity-action="revoke">Remover grupos</button>
+                <button class="ghost-button" type="button" data-identity-action="unlock">Desbloquear</button>
+                <button class="danger-button" type="button" data-identity-action="block">Bloquear</button>
+                <button class="danger-button" type="button" data-identity-action="disable">Desabilitar</button>
+              </div>
+            </div>
+
+            <section class="identity-hero" id="identity-hero"></section>
+
+            <div class="identity-detail-grid">
+              <section class="detail-module">
+                <div class="module-header">
+                  <h3>Informacoes do usuario</h3>
+                </div>
+                <dl class="info-list" id="identity-info"></dl>
+              </section>
+
+              <section class="detail-module">
+                <div class="module-header">
+                  <h3>Seguranca</h3>
+                </div>
+                <div class="security-list" id="identity-security"></div>
+              </section>
+
+              <section class="detail-module wide-detail">
+                <div class="module-header">
+                  <h3>Grupos e permissoes</h3>
+                  <div class="group-add">
+                    <select id="group-select" aria-label="Grupo para adicionar"></select>
+                    <button class="primary-button" type="button" data-identity-action="add-group">Adicionar grupo</button>
+                  </div>
+                </div>
+                <div class="group-list" id="identity-groups"></div>
+              </section>
+
+              <section class="detail-module">
+                <div class="module-header">
+                  <h3>Sistemas impactados</h3>
+                </div>
+                <div class="app-access-list" id="identity-apps"></div>
+              </section>
+
+              <section class="detail-module">
+                <div class="module-header">
+                  <h3>Eventos recentes</h3>
+                </div>
+                <ol class="mini-feed" id="identity-events"></ol>
+              </section>
+            </div>
+          </div>
+
+          <div class="content-panel is-hidden" id="view-access" data-panel="access">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Active Directory</p>
+                <h2>Grupos do AD</h2>
+              </div>
+              <button class="primary-button" type="button" data-action="map-app">Mapear grupo</button>
+            </div>
+            <div class="access-grid" id="access-grid"></div>
+          </div>
+
+          <div class="content-panel is-hidden" id="view-critical" data-panel="critical">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Active Directory</p>
+                <h2>Permissoes criticas</h2>
+              </div>
+              <button class="ghost-button" type="button" data-action="export-critical">Exportar relatorio</button>
+            </div>
+
+            <section class="critical-summary" aria-label="Resumo de permissoes criticas">
+              <article>
+                <span>Usuarios com permissao critica</span>
+                <strong id="critical-user-count">0</strong>
+              </article>
+              <article>
+                <span>Grupos criticos mapeados</span>
+                <strong id="critical-group-count">0</strong>
+              </article>
+              <article>
+                <span>Contas desabilitadas com historico</span>
+                <strong id="critical-disabled-count">0</strong>
+              </article>
+            </section>
+
+            <div class="critical-layout">
+              <section class="detail-module">
+                <div class="module-header">
+                  <h3>Distribuicao por grupo</h3>
+                </div>
+                <div class="critical-groups" id="critical-groups"></div>
+              </section>
+
+              <section class="detail-module">
+                <div class="module-header">
+                  <h3>Usuarios com permissao critica</h3>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Usuario</th>
+                        <th>Departamento</th>
+                        <th>Status</th>
+                        <th>Grupos criticos</th>
+                        <th>Acao</th>
+                      </tr>
+                    </thead>
+                    <tbody id="critical-table"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="content-panel is-hidden" id="view-operators" data-panel="operators">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Controle interno</p>
+                <h2>Operadores do IAM</h2>
+              </div>
+              <button class="primary-button" type="button" data-operator-action="create">Novo operador</button>
+            </div>
+
+            <section class="service-account-panel" aria-label="Conta de servico">
+              <div>
+                <p class="eyebrow">Execucao no AD</p>
+                <h3>svc-iam-ad-editor@casaeterra.local</h3>
+                <span>As alteracoes no Active Directory serao executadas pelo backend com esta conta de servico.</span>
+              </div>
+              <span class="badge active">Conta protegida</span>
+            </section>
+
+            <section class="provisioning-panel" aria-label="Provisionamento de operadores">
+              <article>
+                <span class="panel-kicker">Grupo de entrada</span>
+                <strong>GG-IAM-OPERADORES</strong>
+                <small>Usuarios neste grupo do AD podem autenticar no IAM via LDAP.</small>
+              </article>
+              <article>
+                <span class="panel-kicker">Permissao inicial</span>
+                <strong>Sem acesso operacional</strong>
+                <small>Novos operadores entram sem permissoes ate um administrador liberar o escopo.</small>
+              </article>
+              <article>
+                <span class="panel-kicker">Autorizacao</span>
+                <strong>Controlada no IAM</strong>
+                <small>As permissoes abaixo definem quais acoes o operador pode executar pela conta de servico.</small>
+              </article>
+            </section>
+
+            <div class="operator-layout">
+              <section class="operator-list" id="operator-list" aria-label="Lista de operadores"></section>
+
+              <section class="operator-detail">
+                <div class="module-header">
+                  <h3>Permissoes do operador</h3>
+                  <button class="ghost-button" type="button" data-operator-action="save">Salvar permissoes</button>
+                </div>
+                <div class="operator-profile" id="operator-profile"></div>
+                <div class="permission-grid" id="permission-grid"></div>
+              </section>
+            </div>
+          </div>
+
+          <div class="content-panel is-hidden" id="view-audit" data-panel="audit">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Evidencias</p>
+                <h2>Trilha de auditoria</h2>
+              </div>
+              <button class="ghost-button" type="button" data-action="export-audit">Exportar CSV</button>
+            </div>
+            <ol class="audit-feed" id="audit-feed"></ol>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
