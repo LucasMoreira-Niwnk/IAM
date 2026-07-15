@@ -111,7 +111,7 @@ class ReadOnlyLdapClient:
         if not self._bind_as_user(login, password, user_dn, user_upn):
             return None
 
-        if not self._is_operator(user):
+        if not self._has_iam_access(user):
             return None
 
         return LdapAuthenticatedUser(
@@ -171,8 +171,12 @@ class ReadOnlyLdapClient:
                 return None
             return connection.entries[0].entry_attributes_as_dict
 
-    def _is_operator(self, user: dict[str, Any]) -> bool:
-        expected = self.settings.ldap_operator_group.strip().lower()
+    def _has_iam_access(self, user: dict[str, Any]) -> bool:
+        groups = [self.settings.ldap_operator_group, self.settings.ldap_viewonly_group]
+        return any(self._is_member_of_group(user, group) for group in groups if group.strip())
+
+    def _is_member_of_group(self, user: dict[str, Any], expected_group: str) -> bool:
+        expected = expected_group.strip().lower()
         if not expected:
             return True
 
@@ -185,9 +189,9 @@ class ReadOnlyLdapClient:
         if not user_dn:
             return False
 
-        escaped_group = escape_filter_chars(self.settings.ldap_operator_group.strip())
+        escaped_group = escape_filter_chars(expected_group.strip())
         escaped_user_dn = escape_filter_chars(user_dn)
-        if self.settings.ldap_operator_group.upper().startswith("CN="):
+        if expected_group.upper().startswith("CN="):
             group_filter = f"(distinguishedName={escaped_group})"
         else:
             group_filter = f"(|(cn={escaped_group})(sAMAccountName={escaped_group}))"

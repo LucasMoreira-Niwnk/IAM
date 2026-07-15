@@ -23,7 +23,12 @@ PERMISSION_KEYS = (
     "viewAudit",
 )
 ALL_PERMISSIONS = {key: True for key in PERMISSION_KEYS}
-BOOTSTRAP_FULL_PERMISSION_USERS = {"lucas.salomao"}
+NO_PERMISSIONS = {key: False for key in PERMISSION_KEYS}
+VIEWONLY_PERMISSIONS = {
+    **NO_PERMISSIONS,
+    "viewIdentities": True,
+    "viewAudit": True,
+}
 
 
 def now_iso() -> str:
@@ -66,9 +71,20 @@ def is_account_disabled(user_account_control: Any) -> bool:
 
 
 def matches_group(group_dn: str, expected_group: str) -> bool:
+    if not expected_group:
+        return False
     group_dn = group_dn.lower()
     expected_group = expected_group.lower()
     return group_dn == expected_group or cn_from_dn(group_dn) == expected_group
+
+
+def operator_profile_from_groups(groups: list[Any], settings: Settings) -> tuple[bool, str, dict[str, bool]]:
+    group_dns = [str(group_dn) for group_dn in groups]
+    if any(matches_group(group_dn, settings.ldap_operator_group) for group_dn in group_dns):
+        return True, "active", ALL_PERMISSIONS.copy()
+    if any(matches_group(group_dn, settings.ldap_viewonly_group) for group_dn in group_dns):
+        return True, "active", VIEWONLY_PERMISSIONS.copy()
+    return False, "pending", {}
 
 
 class DirectorySyncService:
@@ -196,12 +212,11 @@ class DirectorySyncService:
                         ),
                     )
 
-                is_operator = any(
-                    matches_group(str(group_dn), self.settings.ldap_operator_group)
-                    for group_dn in list_value(user.get("memberOf"))
+                is_operator, operator_status, operator_permissions = operator_profile_from_groups(
+                    list_value(user.get("memberOf")),
+                    self.settings,
                 )
                 if is_operator:
-                    operator_is_bootstrap_admin = username.lower() in BOOTSTRAP_FULL_PERMISSION_USERS
                     self.connection.execute(
                         """
                         INSERT INTO iam_operators (
@@ -212,14 +227,8 @@ class DirectorySyncService:
                             username = excluded.username,
                             display_name = excluded.display_name,
                             email = excluded.email,
-                            status = CASE
-                                WHEN lower(excluded.username) = 'lucas.salomao' THEN excluded.status
-                                ELSE iam_operators.status
-                            END,
-                            permissions_json = CASE
-                                WHEN lower(excluded.username) = 'lucas.salomao' THEN excluded.permissions_json
-                                ELSE iam_operators.permissions_json
-                            END,
+                            status = excluded.status,
+                            permissions_json = excluded.permissions_json,
                             last_seen_at = excluded.last_seen_at
                         """,
                         (
@@ -227,8 +236,8 @@ class DirectorySyncService:
                             username,
                             first(user.get("displayName")),
                             first(user.get("mail")),
-                            "active" if operator_is_bootstrap_admin else "pending",
-                            json.dumps(ALL_PERMISSIONS if operator_is_bootstrap_admin else {}),
+                            operator_status,
+                            json.dumps(operator_permissions),
                             synced_at,
                             synced_at,
                         ),

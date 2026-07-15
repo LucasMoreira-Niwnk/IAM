@@ -37,6 +37,7 @@ class Settings:
     ldap_user_base_dn: str = os.getenv("LDAP_USER_BASE_DN", os.getenv("LDAP_BASE_DN", ""))
     ldap_group_base_dn: str = os.getenv("LDAP_GROUP_BASE_DN", os.getenv("LDAP_BASE_DN", ""))
     ldap_operator_group: str = os.getenv("LDAP_OPERATOR_GROUP", "GG-IAM-OPERADORES")
+    ldap_viewonly_group: str = os.getenv("LDAP_VIEWONLY_GROUP", "GG-IAM-VIEWONLY")
     ldap_page_size: int = int(os.getenv("LDAP_PAGE_SIZE", "500"))
     ldap_use_ssl: bool = _bool_env("LDAP_USE_SSL", True)
     critical_groups: tuple[str, ...] = tuple(_csv_env("CRITICAL_GROUPS"))

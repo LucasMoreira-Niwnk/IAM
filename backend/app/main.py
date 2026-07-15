@@ -27,7 +27,12 @@ PERMISSION_KEYS = (
     "viewAudit",
 )
 ALL_PERMISSIONS = {key: True for key in PERMISSION_KEYS}
-BOOTSTRAP_FULL_PERMISSION_USERS = {"lucas.salomao"}
+NO_PERMISSIONS = {key: False for key in PERMISSION_KEYS}
+VIEWONLY_PERMISSIONS = {
+    **NO_PERMISSIONS,
+    "viewIdentities": True,
+    "viewAudit": True,
+}
 
 app = FastAPI(title=settings.app_name)
 
@@ -110,10 +115,6 @@ def normalize_login(value: str | None) -> str:
     return value
 
 
-def is_bootstrap_admin(username: str | None) -> bool:
-    return normalize_login(username) in BOOTSTRAP_FULL_PERMISSION_USERS
-
-
 def parse_permissions(raw: str | None) -> dict[str, bool]:
     if not raw:
         return {}
@@ -164,15 +165,61 @@ def find_operator_for_session(connection, session: dict) -> dict | None:
     return dict(row) if row else None
 
 
+def cn_from_dn(dn: str) -> str:
+    first_part = str(dn).split(",", 1)[0]
+    if first_part.upper().startswith("CN="):
+        return first_part[3:]
+    return str(dn)
+
+
+def matches_group(group_dn: str, expected_group: str) -> bool:
+    group_dn = str(group_dn or "").lower()
+    expected_group = str(expected_group or "").lower()
+    return bool(expected_group) and (group_dn == expected_group or cn_from_dn(group_dn) == expected_group)
+
+
+def operator_group_names(connection, identity_id: str | None) -> list[str]:
+    if not identity_id:
+        return []
+    rows = connection.execute(
+        """
+        SELECT group_dn, group_name
+        FROM identity_groups
+        WHERE identity_id = ?
+        """,
+        (identity_id,),
+    ).fetchall()
+    names = []
+    for row in rows:
+        names.extend([row["group_dn"], row["group_name"]])
+    return names
+
+
+def permissions_from_ad_groups(connection, operator: dict | None) -> tuple[dict[str, bool], str, str]:
+    if not operator:
+        return NO_PERMISSIONS.copy(), "pending", "none"
+
+    memberships = operator_group_names(connection, operator.get("identity_id"))
+    if any(matches_group(group, settings.ldap_operator_group) for group in memberships):
+        return ALL_PERMISSIONS.copy(), "active", "ad-admin-full"
+    if any(matches_group(group, settings.ldap_viewonly_group) for group in memberships):
+        return VIEWONLY_PERMISSIONS.copy(), "active", "ad-view-only"
+    return parse_permissions(operator.get("permissions_json")), operator.get("status") or "pending", "local"
+
+
+def enrich_operator(connection, operator: dict) -> dict:
+    permissions, status, source = permissions_from_ad_groups(connection, operator)
+    return {
+        **operator,
+        "status": status,
+        "permissions_json": json.dumps(permissions),
+        "permission_source": source,
+    }
+
+
 def operator_response(session: dict, operator: dict | None = None) -> dict:
-    username = session.get("username")
     permissions = parse_permissions(operator.get("permissions_json") if operator else None)
     status = operator.get("status") if operator else "pending"
-
-    if is_bootstrap_admin(username) or is_bootstrap_admin(operator.get("username") if operator else None):
-        permissions = ALL_PERMISSIONS.copy()
-        status = "active"
-
     return {
         **session,
         "identity_id": operator.get("identity_id") if operator else None,
@@ -185,6 +232,8 @@ def operator_response(session: dict, operator: dict | None = None) -> dict:
 def require_permission(connection, request: Request, permission: str) -> dict:
     session = session_from_request(request)
     operator = find_operator_for_session(connection, session)
+    if operator:
+        operator = enrich_operator(connection, operator)
     current = operator_response(session, operator)
 
     if current["status"] != "active":
@@ -232,7 +281,10 @@ def ldap_login(payload: LdapLoginRequest, response: Response) -> dict:
 def auth_me(request: Request) -> dict:
     session = session_from_request(request)
     with db() as connection:
-        return operator_response(session, find_operator_for_session(connection, session))
+        operator = find_operator_for_session(connection, session)
+        if operator:
+            operator = enrich_operator(connection, operator)
+        return operator_response(session, operator)
 
 
 @app.post("/api/auth/logout")
@@ -306,16 +358,6 @@ def groups() -> list[dict]:
 @app.get("/api/operators")
 def operators() -> list[dict]:
     with db() as connection:
-        connection.execute(
-            """
-            UPDATE iam_operators
-            SET status = 'active',
-                permissions_json = ?
-            WHERE lower(username) = ?
-            """,
-            (json.dumps(ALL_PERMISSIONS), "lucas.salomao"),
-        )
-        connection.commit()
         rows = connection.execute(
             """
             SELECT
@@ -328,7 +370,7 @@ def operators() -> list[dict]:
             ORDER BY o.status DESC, o.display_name COLLATE NOCASE
             """,
         ).fetchall()
-        return rows_to_dicts(rows)
+        return [enrich_operator(connection, dict(row)) for row in rows]
 
 
 @app.post("/api/operators/{identity_id}/permissions")
@@ -352,12 +394,15 @@ def update_operator_permissions(identity_id: str, payload: OperatorPermissionsRe
             raise HTTPException(status_code=404, detail="Operador não encontrado.")
 
         operator = dict(row)
+        _, _, source = permissions_from_ad_groups(connection, operator)
+        if source.startswith("ad-"):
+            raise HTTPException(
+                status_code=409,
+                detail="Permissões deste operador são controladas por grupo do AD.",
+            )
+
         permissions = sanitize_permissions(payload.permissions)
         status = payload.status if payload.status in {"active", "pending", "disabled"} else operator["status"]
-
-        if is_bootstrap_admin(operator.get("username")):
-            permissions = ALL_PERMISSIONS.copy()
-            status = "active"
 
         connection.execute(
             """
@@ -383,7 +428,7 @@ def update_operator_permissions(identity_id: str, payload: OperatorPermissionsRe
             """,
             (identity_id,),
         ).fetchone()
-        return dict(updated)
+        return enrich_operator(connection, dict(updated))
 
 
 @app.get("/api/critical-permissions")

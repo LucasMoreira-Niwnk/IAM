@@ -207,6 +207,15 @@ function parsePermissions(raw) {
   }
 }
 
+function permissionSourceLabel(source) {
+  const labels = {
+    "ad-admin-full": "Grupo AD: Admin full",
+    "ad-view-only": "Grupo AD: Visualização",
+    local: "Permissões locais",
+  };
+  return labels[source] || "Sem grupo de permissão";
+}
+
 function currentPermissions() {
   return parsePermissions(state.currentUser?.permissions);
 }
@@ -694,7 +703,7 @@ function renderCriticalPermissions() {
 
 function renderOperators() {
   if (!state.operators.length) {
-    renderEmpty("#operator-list", "Nenhum operador importado do grupo GG-IAM-OPERADORES.");
+    renderEmpty("#operator-list", "Nenhum operador importado dos grupos IAM do AD.");
     renderEmpty("#operator-profile", "Aguardando sincronização de operadores.");
     renderEmpty("#permission-grid", "");
     return;
@@ -726,6 +735,7 @@ function renderOperatorDetail() {
 
   const operatorPermissions = parsePermissions(operator.permissions_json);
   const enabledCount = permissions.filter((permission) => operatorPermissions[permission.key]).length;
+  const isAdManagedPermission = String(operator.permission_source || "").startsWith("ad-");
 
   document.querySelector("#operator-profile").innerHTML = `
     <div class="identity-avatar">${initials(operator.display_name || operator.username)}</div>
@@ -734,6 +744,7 @@ function renderOperatorDetail() {
       <h3>${operator.display_name || operator.username}</h3>
       <span>${operator.email || ""}</span>
       <span>Departamento: ${operator.department || "-"}</span>
+      <span>${permissionSourceLabel(operator.permission_source)}</span>
     </div>
     <div class="operator-stats">
       <span class="badge ${operator.status === "pending" ? "review" : "active"}">${statusLabel(operator.status)}</span>
@@ -746,7 +757,7 @@ function renderOperatorDetail() {
     .map(
       (permission) => `
         <label class="permission-item">
-          <input type="checkbox" data-permission-key="${permission.key}" ${operatorPermissions[permission.key] ? "checked" : ""} />
+          <input type="checkbox" data-permission-key="${permission.key}" ${operatorPermissions[permission.key] ? "checked" : ""} ${isAdManagedPermission ? "disabled" : ""} />
           <span>
             <strong>${permission.title}</strong>
             <small>${permission.description}</small>
