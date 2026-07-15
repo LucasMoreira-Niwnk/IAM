@@ -12,6 +12,8 @@ const state = {
   activeFilter: "all",
   identityPage: 1,
   identityPageSize: 10,
+  groupPage: 1,
+  groupPageSize: 10,
   loading: true,
   apiOnline: false,
 };
@@ -400,10 +402,16 @@ async function renderIdentityDetail(identityId) {
 function renderAccess() {
   if (!state.groups.length) {
     renderEmpty("#access-grid", "Nenhum grupo sincronizado ainda.");
+    document.querySelector("#group-pagination").innerHTML = "";
     return;
   }
 
-  document.querySelector("#access-grid").innerHTML = state.groups
+  const totalPages = Math.max(1, Math.ceil(state.groups.length / state.groupPageSize));
+  state.groupPage = Math.min(Math.max(1, state.groupPage), totalPages);
+  const start = (state.groupPage - 1) * state.groupPageSize;
+  const visibleGroups = state.groups.slice(start, start + state.groupPageSize);
+
+  document.querySelector("#access-grid").innerHTML = visibleGroups
     .map(
       (group) => `
         <article class="access-card">
@@ -420,6 +428,17 @@ function renderAccess() {
       `,
     )
     .join("");
+
+  const firstItem = start + 1;
+  const lastItem = Math.min(start + state.groupPageSize, state.groups.length);
+  document.querySelector("#group-pagination").innerHTML = `
+    <span>Mostrando ${firstItem}-${lastItem} de ${state.groups.length}</span>
+    <div class="pagination-actions">
+      <button class="ghost-button" type="button" data-group-page-action="prev" ${state.groupPage === 1 ? "disabled" : ""}>Anterior</button>
+      <strong>Página ${state.groupPage} de ${totalPages}</strong>
+      <button class="ghost-button" type="button" data-group-page-action="next" ${state.groupPage === totalPages ? "disabled" : ""}>Próxima</button>
+    </div>
+  `;
 }
 
 function renderCriticalPermissions() {
@@ -649,6 +668,19 @@ function bindEvents() {
       state.identityPage += 1;
     }
     renderIdentities();
+  });
+
+  document.querySelector("#group-pagination").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-group-page-action]");
+    if (!button) return;
+
+    if (button.dataset.groupPageAction === "prev") {
+      state.groupPage -= 1;
+    }
+    if (button.dataset.groupPageAction === "next") {
+      state.groupPage += 1;
+    }
+    renderAccess();
   });
 
   document.querySelector("#identity-table").addEventListener("click", (event) => {
