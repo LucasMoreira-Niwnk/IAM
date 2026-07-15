@@ -30,7 +30,7 @@
       </section>
 
       <section class="login-panel" aria-label="Formulário de login">
-        <form class="login-card" action="index.html">
+        <form class="login-card" id="login-form">
           <div class="login-heading">
             <p class="eyebrow">Entrar</p>
             <h2>Bem-vindo de volta</h2>
@@ -51,12 +51,8 @@
             <a href="#" aria-label="Ajuda com senha do AD">Problema com senha do AD</a>
           </div>
 
-          <button class="primary-button login-submit" type="submit">Entrar no IAM</button>
-
-          <div class="separator"><span>ou</span></div>
-
-          <button class="ghost-button ldap-button" type="button" data-login-action="ldap">
-            Validar acesso via LDAP
+          <button class="primary-button login-submit ldap-button" type="submit" data-login-action="ldap">
+            Entrar via LDAP
           </button>
 
         </form>

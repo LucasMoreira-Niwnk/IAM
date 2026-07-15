@@ -84,7 +84,10 @@ function apiUrl(path) {
 }
 
 async function apiGet(path) {
-  const response = await fetch(apiUrl(path), { headers: { Accept: "application/json" } });
+  const response = await fetch(apiUrl(path), {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
   if (!response.ok) {
     throw new Error(`GET ${path} retornou ${response.status}`);
   }
@@ -92,7 +95,11 @@ async function apiGet(path) {
 }
 
 async function apiPost(path) {
-  const response = await fetch(apiUrl(path), { method: "POST", headers: { Accept: "application/json" } });
+  const response = await fetch(apiUrl(path), {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(detail || `POST ${path} retornou ${response.status}`);

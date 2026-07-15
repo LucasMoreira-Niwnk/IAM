@@ -25,6 +25,10 @@ class Settings:
     app_env: str = os.getenv("APP_ENV", "development")
     cors_origins: tuple[str, ...] = tuple(_csv_env("CORS_ORIGINS"))
     database_path: Path = Path(os.getenv("DATABASE_PATH", "./data/iam.sqlite3"))
+    session_secret: str = os.getenv("SESSION_SECRET", "change-this-session-secret")
+    session_cookie_name: str = os.getenv("SESSION_COOKIE_NAME", "iam_session")
+    session_cookie_secure: bool = _bool_env("SESSION_COOKIE_SECURE", False)
+    session_ttl_seconds: int = int(os.getenv("SESSION_TTL_SECONDS", "28800"))
 
     ldap_server: str = os.getenv("LDAP_SERVER", "")
     ldap_bind_dn: str = os.getenv("LDAP_BIND_DN", "")

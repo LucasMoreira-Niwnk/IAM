@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+import base64
+import hashlib
+import hmac
+import json
+import time
+
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from .config import settings
 from .database import connect, init_db, rows_to_dicts
+from .ldap_client import ReadOnlyLdapClient
 from .sync import DirectorySyncService
 
 
@@ -19,10 +27,62 @@ app.add_middleware(
 )
 
 
+class LdapLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 def db():
     connection = connect(settings.database_path)
     init_db(connection)
     return connection
+
+
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(data: str) -> bytes:
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data + padding)
+
+
+def create_session_token(user: dict) -> str:
+    payload = {
+        "username": user["username"],
+        "display_name": user.get("display_name"),
+        "email": user.get("email"),
+        "upn": user.get("upn"),
+        "exp": int(time.time()) + settings.session_ttl_seconds,
+    }
+    payload_raw = _b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    signature = hmac.new(
+        settings.session_secret.encode("utf-8"),
+        payload_raw.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    return f"{payload_raw}.{_b64url(signature)}"
+
+
+def read_session_token(token: str | None) -> dict | None:
+    if not token or "." not in token:
+        return None
+    payload_raw, signature_raw = token.split(".", 1)
+    expected_signature = hmac.new(
+        settings.session_secret.encode("utf-8"),
+        payload_raw.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    try:
+        received_signature = _b64url_decode(signature_raw)
+        if not hmac.compare_digest(expected_signature, received_signature):
+            return None
+        payload = json.loads(_b64url_decode(payload_raw))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if int(payload.get("exp", 0)) < int(time.time()):
+        return None
+    return payload
 
 
 @app.get("/api/health")
@@ -32,6 +92,45 @@ def health() -> dict[str, str]:
         "app": settings.app_name,
         "mode": "ad-read-only-sync",
     }
+
+
+@app.post("/api/auth/ldap/login")
+def ldap_login(payload: LdapLoginRequest, response: Response) -> dict:
+    user = ReadOnlyLdapClient(settings).authenticate_operator(payload.username, payload.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Credenciais LDAP inválidas ou usuário sem acesso ao IAM.")
+
+    user_payload = {
+        "username": user.username,
+        "display_name": user.display_name,
+        "email": user.email,
+        "upn": user.upn,
+        "distinguished_name": user.distinguished_name,
+    }
+    token = create_session_token(user_payload)
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=token,
+        max_age=settings.session_ttl_seconds,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+    )
+    return {"ok": True, "user": user_payload}
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request) -> dict:
+    session = read_session_token(request.cookies.get(settings.session_cookie_name))
+    if not session:
+        raise HTTPException(status_code=401, detail="Sessão inválida ou expirada.")
+    return session
+
+
+@app.post("/api/auth/logout")
+def auth_logout(response: Response) -> dict:
+    response.delete_cookie(settings.session_cookie_name)
+    return {"ok": True}
 
 
 @app.post("/api/sync/ad")
