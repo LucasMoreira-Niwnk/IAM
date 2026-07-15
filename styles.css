@@ -1295,15 +1295,17 @@ td {
 .modal-avatar {
   width: 34px;
   height: 34px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   align-self: center;
   border-radius: 7px;
   color: #ffffff;
   background: var(--blue);
   font-size: 0.8rem;
   font-weight: 800;
-  line-height: 1;
+  line-height: 34px;
+  text-align: center;
   white-space: nowrap;
 }
 
@@ -1366,6 +1368,7 @@ td {
 .editable-group-list {
   display: grid;
   align-content: start;
+  grid-auto-rows: minmax(66px, auto);
   gap: 8px;
   height: 360px;
   overflow: auto;
@@ -1378,7 +1381,10 @@ td {
 
 .editable-group-card {
   min-height: 66px;
-  justify-content: space-between;
+  height: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 12px;
   min-width: 0;
   padding: 12px;
@@ -1389,10 +1395,14 @@ td {
 
 .editable-group-card > div {
   min-width: 0;
+  display: grid;
+  gap: 3px;
 }
 
 .editable-group-card .text-button {
-  flex: 0 0 auto;
+  align-self: center;
+  justify-self: end;
+  white-space: nowrap;
 }
 
 .editable-group-card.available {
@@ -1405,12 +1415,22 @@ td {
 }
 
 .editable-group-card strong {
+  min-width: 0;
   overflow-wrap: anywhere;
+  line-height: 1.2;
 }
 
 .editable-group-card span {
+  min-width: 0;
+  display: -webkit-box;
+  max-height: 3.9em;
+  overflow: hidden;
   color: var(--muted);
   font-size: 0.88rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .mini-feed {
