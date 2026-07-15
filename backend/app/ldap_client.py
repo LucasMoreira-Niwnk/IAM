@@ -96,21 +96,44 @@ class ReadOnlyLdapClient:
         return LdapSearchResult(users=users, groups=groups)
 
     def authenticate_operator(self, username: str, password: str) -> LdapAuthenticatedUser | None:
-        username = username.strip()
-        if not username or not password:
+        login = username.strip()
+        lookup_username = self._normalize_login(login)
+        if not lookup_username or not password:
             return None
 
-        user = self._find_user(username)
+        user = self._find_user(lookup_username)
         if not user:
+            return None
+
+        user_dn = str(self._first(user.get("distinguishedName")) or "")
+        user_upn = str(self._first(user.get("userPrincipalName")) or "")
+
+        if not self._bind_as_user(login, password, user_dn, user_upn):
             return None
 
         if not self._is_operator(user):
             return None
 
-        user_dn = str(self._first(user.get("distinguishedName")) or "")
-        user_upn = str(self._first(user.get("userPrincipalName")) or username)
-        bind_user = user_dn or user_upn
+        return LdapAuthenticatedUser(
+            username=str(self._first(user.get("sAMAccountName")) or lookup_username),
+            display_name=self._first(user.get("displayName")),
+            email=self._first(user.get("mail")),
+            upn=self._first(user.get("userPrincipalName")),
+            distinguished_name=user_dn,
+        )
 
+    def _bind_as_user(self, login: str, password: str, user_dn: str, user_upn: str) -> bool:
+        bind_candidates = []
+        for candidate in (user_upn, user_dn, login):
+            if candidate and candidate not in bind_candidates:
+                bind_candidates.append(candidate)
+
+        for bind_user in bind_candidates:
+            if self._try_bind(bind_user, password):
+                return True
+        return False
+
+    def _try_bind(self, bind_user: str, password: str) -> bool:
         try:
             server = Server(
                 self.settings.ldap_server,
@@ -125,15 +148,9 @@ class ReadOnlyLdapClient:
                 read_only=True,
                 raise_exceptions=True,
             ):
-                return LdapAuthenticatedUser(
-                    username=str(self._first(user.get("sAMAccountName")) or username),
-                    display_name=self._first(user.get("displayName")),
-                    email=self._first(user.get("mail")),
-                    upn=self._first(user.get("userPrincipalName")),
-                    distinguished_name=user_dn,
-                )
+                return True
         except (LDAPBindError, LDAPException):
-            return None
+            return False
 
     def _find_user(self, username: str) -> dict[str, Any] | None:
         escaped = escape_filter_chars(username)
@@ -163,7 +180,39 @@ class ReadOnlyLdapClient:
             group_dn = str(group_dn)
             if group_dn.lower() == expected or self._cn_from_dn(group_dn).lower() == expected:
                 return True
-        return False
+
+        user_dn = str(self._first(user.get("distinguishedName")) or "")
+        if not user_dn:
+            return False
+
+        escaped_group = escape_filter_chars(self.settings.ldap_operator_group.strip())
+        escaped_user_dn = escape_filter_chars(user_dn)
+        if self.settings.ldap_operator_group.upper().startswith("CN="):
+            group_filter = f"(distinguishedName={escaped_group})"
+        else:
+            group_filter = f"(|(cn={escaped_group})(sAMAccountName={escaped_group}))"
+
+        search_filter = (
+            "(&(objectClass=group)"
+            f"{group_filter}"
+            f"(member:1.2.840.113556.1.4.1941:={escaped_user_dn}))"
+        )
+
+        with self._connection() as connection:
+            connection.search(
+                search_base=self.settings.ldap_group_base_dn,
+                search_filter=search_filter,
+                search_scope=SUBTREE,
+                attributes=["distinguishedName"],
+                size_limit=1,
+            )
+            return bool(connection.entries)
+
+    @staticmethod
+    def _normalize_login(login: str) -> str:
+        if "\\" in login:
+            return login.rsplit("\\", 1)[-1]
+        return login
 
     @staticmethod
     def _first(value: Any) -> Any:
