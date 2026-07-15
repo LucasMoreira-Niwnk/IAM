@@ -43,7 +43,7 @@ document.querySelector("#login-form").addEventListener("submit", async (event) =
 
   try {
     await loginWithLdap(username, password);
-    window.location.href = "/inicio/";
+    window.location.href = "/inicio";
   } catch (error) {
     showToast(error.message);
     form.elements.password.value = "";

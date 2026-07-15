@@ -479,21 +479,17 @@ async function renderIdentityDetail(identityId) {
     ? groups
         .map(
           (group) => `
-            <article class="group-item">
+            <article class="group-item" data-edit-group="${encodeURIComponent(group.group_name)}">
               <div>
                 <strong>${group.group_name}</strong>
                 <span>${group.is_critical ? "Crítico" : "Padrão"}</span>
               </div>
-              <button class="text-button danger-text" type="button" data-readonly-action="remove-group">Remover</button>
+              <button class="text-button" type="button" data-edit-group="${encodeURIComponent(group.group_name)}">Editar</button>
             </article>
           `,
         )
         .join("")
     : `<div class="empty-state">Nenhum grupo retornado pela API.</div>`;
-
-  document.querySelector("#group-select").innerHTML = state.groups
-    .map((group) => `<option value="${group.name}">${group.name}</option>`)
-    .join("");
 
   document.querySelector("#identity-apps").innerHTML = groups.length
     ? groups
@@ -818,6 +814,102 @@ function readonlyNotice(action) {
   showToast(`${action} será liberado em uma próxima etapa. O backend atual está em modo somente leitura.`);
 }
 
+function modalIdentityMarkup(identity) {
+  return `
+    <span class="avatar">${initials(identityName(identity))}</span>
+    <div>
+      <strong>${identityName(identity)}</strong>
+      <span>${identity.username || identity.upn || "-"}${identity.department ? ` - ${identity.department}` : ""}</span>
+    </div>
+  `;
+}
+
+function openModal(modalId) {
+  const modal = document.querySelector(modalId);
+  modal.classList.add("is-visible");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeModals() {
+  document.querySelectorAll(".modal-backdrop").forEach((modal) => {
+    modal.classList.remove("is-visible");
+    modal.setAttribute("aria-hidden", "true");
+  });
+}
+
+function openPasswordModal() {
+  const identity = selectedIdentity();
+  if (!identity) return;
+  document.querySelector("#password-modal-identity").innerHTML = modalIdentityMarkup(identity);
+  openModal("#password-modal");
+}
+
+function groupAlreadyAssigned(groupName) {
+  return state.selectedIdentityGroups.some(
+    (group) => String(group.group_name || "").toLowerCase() === String(groupName || "").toLowerCase(),
+  );
+}
+
+function renderGroupEditor(searchTerm = "") {
+  const identity = selectedIdentity();
+  if (!identity) return;
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const currentGroups = state.selectedIdentityGroups;
+  const availableGroups = state.groups
+    .filter((group) => !groupAlreadyAssigned(group.name))
+    .filter((group) =>
+      [group.name, group.description, group.distinguished_name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearch),
+    )
+    .slice(0, 12);
+
+  document.querySelector("#groups-modal-identity").innerHTML = modalIdentityMarkup(identity);
+  document.querySelector("#current-group-count").textContent = `${currentGroups.length} grupo(s)`;
+  document.querySelector("#current-group-list").innerHTML = currentGroups.length
+    ? currentGroups
+        .map(
+          (group) => `
+            <article class="editable-group-card">
+              <div>
+                <strong>${group.group_name}</strong>
+                <span>${group.is_critical ? "Crítico" : "Padrão"}</span>
+              </div>
+              <button class="text-button danger-text" type="button" data-readonly-submit="remove-group">Remover</button>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhum grupo retornado pela API.</div>`;
+
+  document.querySelector("#available-group-list").innerHTML = availableGroups.length
+    ? availableGroups
+        .map(
+          (group) => `
+            <article class="editable-group-card available">
+              <div>
+                <strong>${group.name}</strong>
+                <span>${group.description || "Sem descrição"}</span>
+              </div>
+              <button class="text-button" type="button" data-readonly-submit="add-group">Adicionar</button>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhum grupo disponível para a busca.</div>`;
+}
+
+function openGroupsModal(groupName = "") {
+  const searchInput = document.querySelector("#group-picker-search");
+  searchInput.value = groupName;
+  renderGroupEditor(groupName);
+  openModal("#groups-modal");
+  window.setTimeout(() => searchInput.focus(), 0);
+}
+
 function bindEvents() {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
@@ -929,12 +1021,54 @@ function bindEvents() {
   });
 
   document.querySelector("#identity-groups").addEventListener("click", (event) => {
-    if (event.target.closest("[data-readonly-action]")) {
-      readonlyNotice("Remoção de grupo");
+    const groupButton = event.target.closest("[data-edit-group]");
+    if (groupButton) {
+      openGroupsModal(decodeURIComponent(groupButton.dataset.editGroup || ""));
     }
   });
 
   document.querySelectorAll("[data-identity-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.identityAction === "password") {
+        openPasswordModal();
+        return;
+      }
+
+      if (button.dataset.identityAction === "add-group" || button.dataset.identityAction === "revoke") {
+        openGroupsModal();
+        return;
+      }
+
+      readonlyNotice(button.textContent.trim());
+    });
+  });
+
+  document.querySelectorAll("[data-modal-close]").forEach((button) => {
+    button.addEventListener("click", closeModals);
+  });
+
+  document.querySelectorAll(".modal-backdrop").forEach((modal) => {
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeModals();
+    });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeModals();
+  });
+
+  document.querySelector("#group-picker-search").addEventListener("input", (event) => {
+    renderGroupEditor(event.target.value);
+  });
+
+  document.querySelector("#groups-modal").addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-readonly-submit]");
+    if (actionButton) {
+      readonlyNotice(actionButton.textContent.trim());
+    }
+  });
+
+  document.querySelectorAll("#password-modal [data-readonly-submit]").forEach((button) => {
     button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
   });
 

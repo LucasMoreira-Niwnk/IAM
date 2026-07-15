@@ -206,8 +206,7 @@
                 <div class="module-header">
                   <h3>Grupos e permissões</h3>
                   <div class="group-add">
-                    <select id="group-select" aria-label="Grupo para adicionar"></select>
-                    <button class="primary-button" type="button" data-identity-action="add-group">Adicionar grupo</button>
+                    <button class="primary-button" type="button" data-identity-action="add-group">Editar grupos</button>
                   </div>
                 </div>
                 <div class="group-list" id="identity-groups"></div>
@@ -357,6 +356,81 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div class="modal-backdrop" id="password-modal" aria-hidden="true">
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="password-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Active Directory</p>
+            <h2 id="password-modal-title">Alterar senha</h2>
+          </div>
+          <button class="icon-button" type="button" data-modal-close aria-label="Fechar">X</button>
+        </div>
+
+        <div class="modal-identity" id="password-modal-identity"></div>
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Nova senha</span>
+            <input type="password" placeholder="Informe a nova senha" autocomplete="new-password" />
+          </label>
+          <label class="field">
+            <span>Confirmar senha</span>
+            <input type="password" placeholder="Confirme a nova senha" autocomplete="new-password" />
+          </label>
+        </div>
+
+        <label class="check-row">
+          <input type="checkbox" checked />
+          <span>Usuário deve trocar a senha no próximo login</span>
+        </label>
+
+        <div class="modal-footer">
+          <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
+          <button class="primary-button" type="button" data-readonly-submit="password">Preparar alteração</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="groups-modal" aria-hidden="true">
+      <section class="modal-card wide-modal" role="dialog" aria-modal="true" aria-labelledby="groups-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Active Directory</p>
+            <h2 id="groups-modal-title">Editar grupos</h2>
+          </div>
+          <button class="icon-button" type="button" data-modal-close aria-label="Fechar">X</button>
+        </div>
+
+        <div class="modal-identity" id="groups-modal-identity"></div>
+
+        <div class="group-editor">
+          <section>
+            <div class="module-header compact-header">
+              <h3>Grupos atuais</h3>
+              <span id="current-group-count">0</span>
+            </div>
+            <div class="editable-group-list" id="current-group-list"></div>
+          </section>
+
+          <section>
+            <div class="module-header compact-header">
+              <h3>Adicionar grupo</h3>
+            </div>
+            <label class="search group-search">
+              <span aria-hidden="true">S</span>
+              <input id="group-picker-search" type="search" placeholder="Buscar grupo do AD" />
+            </label>
+            <div class="editable-group-list available-groups" id="available-group-list"></div>
+          </section>
+        </div>
+
+        <div class="modal-footer">
+          <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
+          <button class="primary-button" type="button" data-readonly-submit="groups">Preparar alteração</button>
+        </div>
+      </section>
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
