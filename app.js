@@ -816,7 +816,7 @@ function readonlyNotice(action) {
 
 function modalIdentityMarkup(identity) {
   return `
-    <span class="avatar">${initials(identityName(identity))}</span>
+    <span class="modal-avatar">${initials(identityName(identity))}</span>
     <div>
       <strong>${identityName(identity)}</strong>
       <span>${identity.username || identity.upn || "-"}${identity.department ? ` - ${identity.department}` : ""}</span>

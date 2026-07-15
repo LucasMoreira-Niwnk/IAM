@@ -1246,6 +1246,10 @@ td {
   width: min(980px, 100%);
 }
 
+#groups-modal .modal-card {
+  max-height: min(760px, calc(100vh - 48px));
+}
+
 .modal-header,
 .modal-footer,
 .modal-identity,
@@ -1277,6 +1281,9 @@ td {
 }
 
 .modal-identity {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
   gap: 10px;
   padding: 12px;
   margin-bottom: 16px;
@@ -1285,12 +1292,27 @@ td {
   background: #fbfdff;
 }
 
+.modal-avatar {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  border-radius: 7px;
+  color: #ffffff;
+  background: var(--blue);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .modal-identity strong,
 .modal-identity span {
   display: block;
 }
 
-.modal-identity span:not(.avatar) {
+.modal-identity span:not(.modal-avatar) {
   color: var(--muted);
   font-size: 0.9rem;
 }
@@ -1298,8 +1320,15 @@ td {
 .form-grid,
 .group-editor {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  align-items: start;
   gap: 16px;
+}
+
+.group-editor > section {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
 }
 
 .check-row {
@@ -1318,6 +1347,7 @@ td {
 }
 
 .compact-header {
+  min-height: 24px;
   margin-bottom: 10px;
 }
 
@@ -1335,13 +1365,19 @@ td {
 
 .editable-group-list {
   display: grid;
+  align-content: start;
   gap: 8px;
-  max-height: 360px;
+  height: 360px;
   overflow: auto;
   padding-right: 4px;
 }
 
+.available-groups {
+  height: 308px;
+}
+
 .editable-group-card {
+  min-height: 66px;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
@@ -1349,6 +1385,14 @@ td {
   border: 1px solid #e5eaf1;
   border-radius: 8px;
   background: #fbfdff;
+}
+
+.editable-group-card > div {
+  min-width: 0;
+}
+
+.editable-group-card .text-button {
+  flex: 0 0 auto;
 }
 
 .editable-group-card.available {
