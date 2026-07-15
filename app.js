@@ -1,172 +1,53 @@
-const identities = [
-  {
-    id: "ana-martins",
-    name: "Ana Martins",
-    email: "ana.martins@empresa.com",
-    username: "ana.martins",
-    title: "Analista financeira",
-    department: "Financeiro",
-    manager: "Marcos Lima",
-    phone: "+55 11 4000-1001",
-    location: "Sao Paulo",
-    source: "AD",
-    status: "active",
-    risk: "low",
-    access: 8,
-    lastLogin: "Hoje, 08:12",
-    passwordAge: "34 dias",
-    groups: ["CT-Financeiro", "ERP-Leitura", "M365-Usuarios", "ERP-Admin"],
-    apps: ["Microsoft 365", "ERP Financeiro", "Service Desk"],
-    events: ["Logon no AD registrado", "Senha alterada ha 34 dias", "Grupo ERP-Admin revisado"],
-  },
-  {
-    id: "bruno-costa",
-    name: "Bruno Costa",
-    email: "bruno.costa@empresa.com",
-    username: "bruno.costa",
-    title: "Administrador de infraestrutura",
-    department: "TI",
-    manager: "Renata Alves",
-    phone: "+55 11 4000-1002",
-    location: "Campinas",
-    source: "AD",
-    status: "review",
-    risk: "high",
-    access: 21,
-    lastLogin: "Hoje, 07:44",
-    passwordAge: "82 dias",
-    groups: ["CT-TI", "VPN-Admin", "M365-Admin", "ServiceDesk-Admin"],
-    apps: ["Microsoft 365", "VPN Global", "Service Desk", "Data Lake"],
-    events: ["Permissao critica detectada", "Revisao trimestral pendente", "Logon fora do horario padrao"],
-  },
-  {
-    id: "carla-nunes",
-    name: "Carla Nunes",
-    email: "carla.nunes@empresa.com",
-    username: "carla.nunes",
-    title: "Coordenadora de operacoes",
-    department: "Operacoes",
-    manager: "Patricia Gomes",
-    phone: "+55 11 4000-1003",
-    location: "Santos",
-    source: "HR",
-    status: "active",
-    risk: "medium",
-    access: 12,
-    lastLogin: "Ontem, 18:31",
-    passwordAge: "19 dias",
-    groups: ["CT-Operacoes", "CRM-Leitura", "M365-Usuarios"],
-    apps: ["Microsoft 365", "CRM Vendas", "Service Desk"],
-    events: ["Novo cargo importado do RH", "Grupo CRM-Leitura concedido", "Senha alterada ha 19 dias"],
-  },
-  {
-    id: "diego-rocha",
-    name: "Diego Rocha",
-    email: "diego.rocha@empresa.com",
-    username: "diego.rocha",
-    title: "Executivo comercial",
-    department: "Comercial",
-    manager: "Sofia Mendes",
-    phone: "+55 11 4000-1004",
-    location: "Rio de Janeiro",
-    source: "AD",
-    status: "blocked",
-    risk: "high",
-    access: 3,
-    lastLogin: "12/05/2026, 16:20",
-    passwordAge: "91 dias",
-    groups: ["CT-Comercial"],
-    apps: ["Microsoft 365", "CRM Vendas"],
-    events: ["Conta bloqueada por desligamento", "Grupos privilegiados removidos", "Sessao encerrada"],
-  },
-  {
-    id: "elisa-prado",
-    name: "Elisa Prado",
-    email: "elisa.prado@empresa.com",
-    username: "elisa.prado",
-    title: "Advogada corporativa",
-    department: "Juridico",
-    manager: "Helena Torres",
-    phone: "+55 11 4000-1005",
-    location: "Sao Paulo",
-    source: "AD",
-    status: "review",
-    risk: "medium",
-    access: 10,
-    lastLogin: "Hoje, 09:04",
-    passwordAge: "45 dias",
-    groups: ["CT-Juridico", "M365-Usuarios", "DPO-Consulta", "DataLake-Consulta"],
-    apps: ["Microsoft 365", "Data Lake"],
-    events: ["Conta exige revisao operacional", "Politica DPO aplicada", "Grupo DataLake-Consulta revisado"],
-  },
-];
+const API_BASE_URL = window.IAM_API_BASE_URL || localStorage.getItem("IAM_API_BASE_URL") || "";
 
-const availableGroups = [
-  "CT-Financeiro",
-  "CT-TI",
-  "CT-Operacoes",
-  "CT-Comercial",
-  "CT-Juridico",
-  "ERP-Admin",
-  "ERP-Leitura",
-  "VPN-Admin",
-  "VPN-Usuarios",
-  "M365-Admin",
-  "M365-Usuarios",
-  "DataLake-Consulta",
-  "ServiceDesk-Admin",
-  "Domain Admins",
-  "Account Operators",
-  "Backup Operators",
-];
+const state = {
+  identities: [],
+  groups: [],
+  operators: [],
+  critical: { users_count: 0, groups_count: 0, users: [], groups: [] },
+  syncRuns: [],
+  selectedIdentityId: null,
+  selectedIdentityGroups: [],
+  selectedOperatorId: null,
+  activeFilter: "all",
+  loading: true,
+  apiOnline: false,
+};
 
-const criticalGroups = [
-  "Domain Admins",
-  "Account Operators",
-  "Backup Operators",
-  "ERP-Admin",
-  "VPN-Admin",
-  "M365-Admin",
-  "ServiceDesk-Admin",
-  "DataLake-Consulta",
-];
+const statusLabels = {
+  active: "Ativo",
+  pending: "Pendente",
+  review: "Em revisão",
+  blocked: "Bloqueado",
+  disabled: "Desabilitado",
+};
 
-const adGroupCatalog = [
-  { name: "M365-Usuarios", owner: "TI Corporativo", members: 128, critical: false, risk: "low" },
-  { name: "ERP-Admin", owner: "Controladoria", members: 3, critical: true, risk: "high" },
-  { name: "CRM-Leitura", owner: "Comercial", members: 54, critical: false, risk: "low" },
-  { name: "VPN-Admin", owner: "Seguranca", members: 2, critical: true, risk: "high" },
-  { name: "ServiceDesk-Admin", owner: "Operacoes TI", members: 4, critical: true, risk: "medium" },
-  { name: "DataLake-Consulta", owner: "Dados", members: 8, critical: true, risk: "high" },
-];
-
-const serviceDeskOperations = [
-  { title: "Reset de senha para usuario bloqueado", owner: "Service Desk N1", priority: "Alta" },
-  { title: "Inclusao em grupo M365-Usuarios", owner: "Service Desk N1", priority: "Normal" },
-  { title: "Remocao de grupo VPN-Admin", owner: "Service Desk N2", priority: "Critica" },
-  { title: "Bloqueio por desligamento importado do RH", owner: "Service Desk N2", priority: "Alta" },
-];
+const riskLabels = {
+  low: "Baixo",
+  medium: "Médio",
+  high: "Alto",
+};
 
 const permissions = [
   {
     key: "viewIdentities",
     title: "Consultar identidades",
-    description: "Pesquisar usuarios e visualizar atributos importados do AD.",
+    description: "Pesquisar usuários e visualizar atributos importados do AD.",
   },
   {
     key: "resetPassword",
     title: "Alterar senha",
-    description: "Redefinir senha e exigir troca no proximo logon.",
+    description: "Redefinir senha e exigir troca no próximo logon.",
   },
   {
     key: "lockUnlock",
     title: "Bloquear ou desbloquear",
-    description: "Bloquear, desbloquear e encerrar sessoes do usuario.",
+    description: "Bloquear, desbloquear e encerrar sessões do usuário.",
   },
   {
     key: "manageGroups",
     title: "Editar grupos",
-    description: "Adicionar ou remover o usuario de grupos permitidos.",
+    description: "Adicionar ou remover o usuário de grupos permitidos.",
   },
   {
     key: "managePrivilegedGroups",
@@ -176,135 +57,39 @@ const permissions = [
   {
     key: "syncAd",
     title: "Sincronizar AD",
-    description: "Executar leitura manual do diretorio e atualizar cache.",
+    description: "Executar leitura manual do diretório e atualizar cache.",
   },
   {
     key: "manageOperators",
     title: "Gerenciar operadores",
-    description: "Criar usuarios internos e alterar permissoes do IAM.",
+    description: "Criar usuários internos e alterar permissões do IAM.",
   },
   {
     key: "viewAudit",
     title: "Auditoria",
-    description: "Consultar logs das alteracoes feitas via conta de servico.",
+    description: "Consultar logs das alterações feitas via conta de serviço.",
   },
 ];
 
-const operators = [
-  {
-    id: "mariana-lopes",
-    name: "Mariana Lopes",
-    email: "mariana.lopes@casaeterra.com",
-    role: "Coordenadora Service Desk",
-    status: "active",
-    mfa: "Ativo",
-    lastAccess: "Hoje, 09:28",
-    scope: "Todos os departamentos",
-    permissions: {
-      viewIdentities: true,
-      resetPassword: true,
-      lockUnlock: true,
-      manageGroups: true,
-      managePrivilegedGroups: true,
-      syncAd: true,
-      manageOperators: true,
-      viewAudit: true,
-    },
-  },
-  {
-    id: "rafael-pires",
-    name: "Rafael Pires",
-    email: "rafael.pires@casaeterra.com",
-    role: "Service Desk N2",
-    status: "active",
-    mfa: "Ativo",
-    lastAccess: "Hoje, 10:14",
-    scope: "TI, Operacoes e Comercial",
-    permissions: {
-      viewIdentities: true,
-      resetPassword: true,
-      lockUnlock: true,
-      manageGroups: true,
-      managePrivilegedGroups: false,
-      syncAd: true,
-      manageOperators: false,
-      viewAudit: true,
-    },
-  },
-  {
-    id: "julia-santos",
-    name: "Julia Santos",
-    email: "julia.santos@casaeterra.com",
-    role: "Service Desk N1",
-    status: "review",
-    mfa: "Pendente",
-    lastAccess: "Ontem, 17:51",
-    scope: "Usuarios padrao",
-    permissions: {
-      viewIdentities: true,
-      resetPassword: true,
-      lockUnlock: false,
-      manageGroups: false,
-      managePrivilegedGroups: false,
-      syncAd: false,
-      manageOperators: false,
-      viewAudit: false,
-    },
-  },
-  {
-    id: "thiago-ramos",
-    name: "Thiago Ramos",
-    email: "thiago.ramos@casaeterra.com",
-    role: "Service Desk N1",
-    status: "review",
-    mfa: "Ativo",
-    lastAccess: "Primeiro acesso pendente",
-    scope: "Aguardando liberacao",
-    permissions: {
-      viewIdentities: false,
-      resetPassword: false,
-      lockUnlock: false,
-      manageGroups: false,
-      managePrivilegedGroups: false,
-      syncAd: false,
-      manageOperators: false,
-      viewAudit: false,
-    },
-  },
-];
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
-const audits = [
-  { time: "08:42", event: "Sincronizacao AD concluiu com 128 alteracoes", actor: "Conector AD" },
-  { time: "09:15", event: "Grupo VPN Admin marcado para recertificacao", actor: "Politica IAM" },
-  { time: "10:03", event: "Senha redefinida para Ana Martins", actor: "Marcos Lima" },
-  { time: "11:20", event: "Usuario Diego Rocha bloqueado por desligamento", actor: "Sistema RH" },
-  { time: "13:08", event: "Grupo DataLake-Consulta mapeado como critico", actor: "Dados" },
-];
+async function apiGet(path) {
+  const response = await fetch(apiUrl(path), { headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    throw new Error(`GET ${path} retornou ${response.status}`);
+  }
+  return response.json();
+}
 
-const statusLabels = {
-  active: "Ativo",
-  review: "Em revisao",
-  blocked: "Bloqueado",
-  disabled: "Desabilitado",
-};
-
-const riskLabels = {
-  low: "Baixo",
-  medium: "Medio",
-  high: "Alto",
-};
-
-let activeFilter = "all";
-let selectedIdentityId = identities[0].id;
-let selectedOperatorId = operators[0].id;
-
-function initials(name) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+async function apiPost(path) {
+  const response = await fetch(apiUrl(path), { method: "POST", headers: { Accept: "application/json" } });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `POST ${path} retornou ${response.status}`);
+  }
+  return response.json();
 }
 
 function showToast(message) {
@@ -312,53 +97,126 @@ function showToast(message) {
   toast.textContent = message;
   toast.classList.add("is-visible");
   window.clearTimeout(showToast.timeout);
-  showToast.timeout = window.setTimeout(() => toast.classList.remove("is-visible"), 2600);
+  showToast.timeout = window.setTimeout(() => toast.classList.remove("is-visible"), 3200);
+}
+
+function initials(name = "") {
+  const base = name || "?";
+  return base
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function identityName(identity) {
+  return identity.display_name || identity.username || identity.upn || "Usuário sem nome";
+}
+
+function identityEmail(identity) {
+  return identity.email || identity.upn || "";
+}
+
+function statusLabel(status) {
+  return statusLabels[status] || status || "Indefinido";
+}
+
+function statusClass(status) {
+  return status || "review";
+}
+
+function criticality(identity) {
+  const count = Number(identity.critical_group_count || 0);
+  if (count >= 2) return "high";
+  if (count === 1) return "medium";
+  return "low";
+}
+
+function criticalityLabel(identity) {
+  return riskLabels[criticality(identity)];
+}
+
+function parsePermissions(raw) {
+  if (!raw) return {};
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function selectedIdentity() {
+  return state.identities.find((identity) => identity.id === state.selectedIdentityId) || state.identities[0];
+}
+
+function selectedOperator() {
+  return state.operators.find((operator) => operator.identity_id === state.selectedOperatorId) || state.operators[0];
+}
+
+function formatSyncTime(value) {
+  if (!value) return "Sem registro";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("pt-BR");
+}
+
+function renderEmpty(targetSelector, message) {
+  document.querySelector(targetSelector).innerHTML = `<div class="empty-state">${message}</div>`;
 }
 
 function renderMetrics() {
-  document.querySelector("#metric-users").textContent = identities.filter(
-    (user) => user.status === "active",
-  ).length;
-  document.querySelector("#metric-privileged").textContent = criticalUsers().length;
-  document.querySelector("#metric-operations").textContent = serviceDeskOperations.length;
-  document.querySelector("#metric-operators").textContent = operators.filter(
-    (operator) => operator.status === "active",
-  ).length;
-}
+  const activeUsers = state.identities.filter((identity) => identity.status === "active").length;
+  const operationsToday = state.syncRuns.filter((run) => {
+    if (!run.started_at) return false;
+    const started = new Date(run.started_at);
+    const today = new Date();
+    return started.toDateString() === today.toDateString();
+  }).length;
 
-function userCriticalGroups(user) {
-  return user.groups.filter((group) => criticalGroups.includes(group));
-}
-
-function criticalUsers() {
-  return identities.filter((user) => userCriticalGroups(user).length > 0);
+  document.querySelector("#metric-users").textContent = activeUsers;
+  document.querySelector("#metric-privileged").textContent = state.critical.users_count || 0;
+  document.querySelector("#metric-operations").textContent = operationsToday;
+  document.querySelector("#metric-operators").textContent = state.operators.length;
 }
 
 function renderReviews() {
   const reviewList = document.querySelector("#review-list");
-  const items = serviceDeskOperations;
+  const latestRuns = state.syncRuns.slice(0, 4);
 
-  reviewList.innerHTML = items
+  if (!latestRuns.length) {
+    renderEmpty("#review-list", "Nenhuma sincronização registrada ainda.");
+    return;
+  }
+
+  reviewList.innerHTML = latestRuns
     .map(
-      (item) => `
+      (run) => `
         <article class="review-item">
           <div>
-            <strong>${item.title}</strong>
-            <span>${item.owner}</span>
+            <strong>Sincronização ${statusLabel(run.status)}</strong>
+            <span>${formatSyncTime(run.started_at)} - ${run.users_synced || 0} usuários, ${run.groups_synced || 0} grupos</span>
           </div>
-          <span class="badge ${item.priority === "Critica" ? "high" : "medium"}">${item.priority}</span>
+          <span class="badge ${run.status === "success" ? "active" : "review"}">${run.status}</span>
         </article>
       `,
     )
     .join("");
 }
 
-function renderRiskBars() {
+function renderDirectoryIndicators() {
+  const blocked = state.identities.filter((identity) => identity.status === "blocked").length;
+  const disabled = state.identities.filter((identity) => identity.status === "disabled").length;
+  const criticalGroups = state.critical.groups_count || 0;
+  const pendingOperators = state.operators.filter((operator) => operator.status === "pending").length;
+  const max = Math.max(state.identities.length, state.groups.length, state.operators.length, 1);
   const sources = [
-    { label: "Contas bloqueadas", value: 20 },
-    { label: "Contas em revisao", value: 40 },
-    { label: "Grupos criticos com membros", value: 70 },
-    { label: "Operadores sem permissao", value: 25 },
+    { label: "Contas bloqueadas", value: Math.round((blocked / max) * 100) },
+    { label: "Contas desabilitadas", value: Math.round((disabled / max) * 100) },
+    { label: "Grupos críticos com membros", value: Math.round((criticalGroups / Math.max(state.groups.length, 1)) * 100) },
+    { label: "Operadores pendentes", value: Math.round((pendingOperators / Math.max(state.operators.length, 1)) * 100) },
   ];
 
   document.querySelector("#risk-bars").innerHTML = sources
@@ -378,144 +236,166 @@ function renderRiskBars() {
 
 function renderIdentities() {
   const searchTerm = document.querySelector("#global-search").value.trim().toLowerCase();
-  const users = identities.filter((user) => {
-    const matchesFilter = activeFilter === "all" || user.status === activeFilter;
-    const searchable = `${user.name} ${user.email} ${user.department} ${user.source}`.toLowerCase();
+  const users = state.identities.filter((identity) => {
+    const matchesFilter = state.activeFilter === "all" || identity.status === state.activeFilter;
+    const searchable = [
+      identityName(identity),
+      identityEmail(identity),
+      identity.username,
+      identity.department,
+      identity.distinguished_name,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
     return matchesFilter && searchable.includes(searchTerm);
   });
 
+  if (!users.length) {
+    document.querySelector("#identity-table").innerHTML = `
+      <tr><td colspan="7">Nenhuma identidade encontrada. Execute a sincronização com o AD.</td></tr>
+    `;
+    return;
+  }
+
   document.querySelector("#identity-table").innerHTML = users
     .map(
-      (user) => `
-        <tr class="clickable-row" data-identity-id="${user.id}">
+      (identity) => `
+        <tr class="clickable-row" data-identity-id="${identity.id}">
           <td>
             <div class="user-cell">
-              <span class="avatar">${initials(user.name)}</span>
+              <span class="avatar">${initials(identityName(identity))}</span>
               <div>
-                <strong>${user.name}</strong><br />
-                <small>${user.email}</small>
+                <strong>${identityName(identity)}</strong><br />
+                <small>${identityEmail(identity)}</small>
               </div>
             </div>
           </td>
-          <td>${user.department}</td>
-          <td>${user.source}</td>
-          <td><span class="badge ${user.status}">${statusLabels[user.status]}</span></td>
-          <td><span class="badge ${user.risk}">${riskLabels[user.risk]}</span></td>
-          <td>${user.groups.length}</td>
-          <td><button class="text-button" type="button" data-open-identity="${user.id}">Detalhes</button></td>
+          <td>${identity.department || "-"}</td>
+          <td>AD</td>
+          <td><span class="badge ${statusClass(identity.status)}">${statusLabel(identity.status)}</span></td>
+          <td><span class="badge ${criticality(identity)}">${criticalityLabel(identity)}</span></td>
+          <td>${identity.group_count || 0}</td>
+          <td><button class="text-button" type="button" data-open-identity="${identity.id}">Detalhes</button></td>
         </tr>
       `,
     )
     .join("");
 }
 
-function selectedIdentity() {
-  return identities.find((user) => user.id === selectedIdentityId) || identities[0];
-}
+async function renderIdentityDetail(identityId) {
+  if (identityId) state.selectedIdentityId = identityId;
+  const identity = selectedIdentity();
+  if (!identity) {
+    renderEmpty("#identity-hero", "Nenhuma identidade selecionada.");
+    return;
+  }
 
-function renderIdentityDetail() {
-  const user = selectedIdentity();
+  try {
+    state.selectedIdentityGroups = await apiGet(`/api/identities/${identity.id}/groups`);
+  } catch {
+    state.selectedIdentityGroups = [];
+    showToast("Não foi possível carregar os grupos desta identidade.");
+  }
+
   const blockButton = document.querySelector("[data-identity-action='block']");
   const unlockButton = document.querySelector("[data-identity-action='unlock']");
   const disableButton = document.querySelector("[data-identity-action='disable']");
 
-  if (blockButton) {
-    blockButton.disabled = user.status === "blocked" || user.status === "disabled";
-  }
-
-  if (unlockButton) {
-    unlockButton.disabled = user.status !== "blocked";
-  }
-
-  if (disableButton) {
-    disableButton.textContent = user.status === "disabled" ? "Habilitar" : "Desabilitar";
-  }
+  blockButton.disabled = identity.status === "blocked" || identity.status === "disabled";
+  unlockButton.disabled = identity.status !== "blocked";
+  disableButton.textContent = identity.status === "disabled" ? "Habilitar" : "Desabilitar";
 
   document.querySelector("#identity-hero").innerHTML = `
-    <div class="identity-avatar">${initials(user.name)}</div>
+    <div class="identity-avatar">${initials(identityName(identity))}</div>
     <div>
-      <p class="eyebrow">${user.department}</p>
-      <h2>${user.name}</h2>
-      <span>${user.title} - ${user.email}</span>
+      <p class="eyebrow">${identity.department || "Diretório"}</p>
+      <h2>${identityName(identity)}</h2>
+      <span>${identity.title || "Sem cargo informado"} - ${identityEmail(identity)}</span>
     </div>
     <div class="identity-badges">
-      <span class="badge ${user.status}">${statusLabels[user.status]}</span>
-      <span class="badge ${user.risk}">Criticidade ${riskLabels[user.risk]}</span>
+      <span class="badge ${statusClass(identity.status)}">${statusLabel(identity.status)}</span>
+      <span class="badge ${criticality(identity)}">Criticidade ${criticalityLabel(identity)}</span>
     </div>
   `;
 
   const info = [
-    ["Usuario", user.username],
-    ["Gestor", user.manager],
-    ["Telefone", user.phone],
-    ["Localidade", user.location],
-    ["Origem", user.source],
-    ["Ultimo login", user.lastLogin],
+    ["Usuário", identity.username],
+    ["UPN", identity.upn],
+    ["Telefone", identity.phone],
+    ["Localidade", identity.location],
+    ["Distinguished Name", identity.distinguished_name],
+    ["Última sincronização", formatSyncTime(identity.synced_at)],
   ];
 
   document.querySelector("#identity-info").innerHTML = info
-    .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
+    .map(([label, value]) => `<div><dt>${label}</dt><dd>${value || "-"}</dd></div>`)
     .join("");
 
   document.querySelector("#identity-security").innerHTML = `
     <article>
-      <span>Idade da senha</span>
-      <strong>${user.passwordAge}</strong>
+      <span>pwdLastSet</span>
+      <strong>${identity.pwd_last_set || "-"}</strong>
     </article>
     <article>
-      <span>Sessoes ativas</span>
-      <strong>${["blocked", "disabled"].includes(user.status) ? "0" : "2"}</strong>
+      <span>lastLogonTimestamp</span>
+      <strong>${identity.last_logon_timestamp || "-"}</strong>
     </article>
   `;
 
-  document.querySelector("#identity-groups").innerHTML = user.groups
-    .map(
-      (group) => `
-        <article class="group-item">
-          <div>
-            <strong>${group}</strong>
-            <span>${group.includes("Admin") ? "Privilegiado" : "Padrao"}</span>
-          </div>
-          <button class="text-button danger-text" type="button" data-remove-group="${group}">Remover</button>
-        </article>
-      `,
-    )
+  const groups = state.selectedIdentityGroups;
+  document.querySelector("#identity-groups").innerHTML = groups.length
+    ? groups
+        .map(
+          (group) => `
+            <article class="group-item">
+              <div>
+                <strong>${group.group_name}</strong>
+                <span>${group.is_critical ? "Crítico" : "Padrão"}</span>
+              </div>
+              <button class="text-button danger-text" type="button" data-readonly-action="remove-group">Remover</button>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhum grupo retornado pela API.</div>`;
+
+  document.querySelector("#group-select").innerHTML = state.groups
+    .map((group) => `<option value="${group.name}">${group.name}</option>`)
     .join("");
 
-  const groupSelect = document.querySelector("#group-select");
-  groupSelect.innerHTML = availableGroups
-    .filter((group) => !user.groups.includes(group))
-    .map((group) => `<option value="${group}">${group}</option>`)
-    .join("");
+  document.querySelector("#identity-apps").innerHTML = groups.length
+    ? groups
+        .filter((group) => group.is_critical)
+        .map((group) => `<article><strong>${group.group_name}</strong><span>Grupo crítico no AD</span></article>`)
+        .join("") || `<div class="empty-state">Nenhum grupo crítico associado.</div>`
+    : `<div class="empty-state">Sem dados de grupos para avaliar impacto.</div>`;
 
-  document.querySelector("#identity-apps").innerHTML = user.apps
-    .map((app) => `<article><strong>${app}</strong><span>Provisionado por grupo</span></article>`)
-    .join("");
-
-  document.querySelector("#identity-events").innerHTML = user.events
-    .map((event) => `<li>${event}</li>`)
-    .join("");
-}
-
-function openIdentityDetail(identityId) {
-  selectedIdentityId = identityId;
-  renderIdentityDetail();
-  switchView("identity-detail");
+  document.querySelector("#identity-events").innerHTML = `
+    <li>Dados sincronizados do AD em ${formatSyncTime(identity.synced_at)}</li>
+    <li>Conta atualmente marcada como ${statusLabel(identity.status)}</li>
+    <li>${identity.critical_group_count || 0} grupo(s) crítico(s) associado(s)</li>
+  `;
 }
 
 function renderAccess() {
-  document.querySelector("#access-grid").innerHTML = adGroupCatalog
+  if (!state.groups.length) {
+    renderEmpty("#access-grid", "Nenhum grupo sincronizado ainda.");
+    return;
+  }
+
+  document.querySelector("#access-grid").innerHTML = state.groups
     .map(
-      (app) => `
+      (group) => `
         <article class="access-card">
           <div>
-            <strong>${app.name}</strong>
-            <span>Responsavel: ${app.owner}</span>
+            <strong>${group.name}</strong>
+            <span>${group.description || "Sem descrição"}</span>
           </div>
-          <span class="badge ${app.risk}">${app.critical ? "Critico" : "Padrao"}</span>
+          <span class="badge ${group.is_critical ? "high" : "low"}">${group.is_critical ? "Crítico" : "Padrão"}</span>
           <footer>
-            <span>${app.members} membros</span>
-            <span>${app.critical ? "Requer controle" : "Uso comum"}</span>
+            <span>${group.member_count || 0} membros</span>
+            <span>AD</span>
           </footer>
         </article>
       `,
@@ -524,73 +404,77 @@ function renderAccess() {
 }
 
 function renderCriticalPermissions() {
-  const users = criticalUsers();
-  const groupCounts = criticalGroups
-    .map((group) => ({
-      group,
-      count: identities.filter((user) => user.groups.includes(group)).length,
-    }))
-    .filter((item) => item.count > 0);
-
-  document.querySelector("#critical-user-count").textContent = users.length;
-  document.querySelector("#critical-group-count").textContent = groupCounts.length;
-  document.querySelector("#critical-disabled-count").textContent = users.filter(
-    (user) => user.status === "disabled" || user.status === "blocked",
+  document.querySelector("#critical-user-count").textContent = state.critical.users_count || 0;
+  document.querySelector("#critical-group-count").textContent = state.critical.groups_count || 0;
+  document.querySelector("#critical-disabled-count").textContent = (state.critical.users || []).filter(
+    (identity) => identity.status === "disabled" || identity.status === "blocked",
   ).length;
 
-  document.querySelector("#critical-groups").innerHTML = groupCounts
-    .map(
-      (item) => `
-        <article class="critical-group-row">
-          <div>
-            <strong>${item.group}</strong>
-            <span>${item.count} usuario${item.count > 1 ? "s" : ""}</span>
-          </div>
-          <div class="bar" aria-hidden="true"><span style="width: ${Math.min(item.count * 24, 100)}%"></span></div>
-        </article>
-      `,
-    )
-    .join("");
-
-  document.querySelector("#critical-table").innerHTML = users
-    .map((user) => {
-      const groups = userCriticalGroups(user);
-      return `
-        <tr class="clickable-row" data-critical-identity-id="${user.id}">
-          <td>
-            <div class="user-cell">
-              <span class="avatar">${initials(user.name)}</span>
+  document.querySelector("#critical-groups").innerHTML = state.critical.groups?.length
+    ? state.critical.groups
+        .map(
+          (group) => `
+            <article class="critical-group-row">
               <div>
-                <strong>${user.name}</strong><br />
-                <small>${user.email}</small>
+                <strong>${group.group_name}</strong>
+                <span>${group.member_count} usuário${group.member_count > 1 ? "s" : ""}</span>
               </div>
-            </div>
-          </td>
-          <td>${user.department}</td>
-          <td><span class="badge ${user.status}">${statusLabels[user.status]}</span></td>
-          <td>${groups.map((group) => `<span class="inline-pill">${group}</span>`).join("")}</td>
-          <td><button class="text-button" type="button" data-open-critical="${user.id}">Detalhes</button></td>
-        </tr>
-      `;
-    })
-    .join("");
-}
+              <div class="bar" aria-hidden="true"><span style="width: ${Math.min(group.member_count * 12, 100)}%"></span></div>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhum grupo crítico encontrado.</div>`;
 
-function selectedOperator() {
-  return operators.find((operator) => operator.id === selectedOperatorId) || operators[0];
+  document.querySelector("#critical-table").innerHTML = state.critical.users?.length
+    ? state.critical.users
+        .map(
+          (identity) => `
+            <tr class="clickable-row" data-critical-identity-id="${identity.id}">
+              <td>
+                <div class="user-cell">
+                  <span class="avatar">${initials(identityName(identity))}</span>
+                  <div>
+                    <strong>${identityName(identity)}</strong><br />
+                    <small>${identity.email || identity.username || ""}</small>
+                  </div>
+                </div>
+              </td>
+              <td>${identity.department || "-"}</td>
+              <td><span class="badge ${statusClass(identity.status)}">${statusLabel(identity.status)}</span></td>
+              <td>${String(identity.critical_groups || "")
+                .split(",")
+                .filter(Boolean)
+                .map((group) => `<span class="inline-pill">${group.trim()}</span>`)
+                .join("")}</td>
+              <td><button class="text-button" type="button" data-open-critical="${identity.id}">Detalhes</button></td>
+            </tr>
+          `,
+        )
+        .join("")
+    : `<tr><td colspan="5">Nenhuma permissão crítica encontrada.</td></tr>`;
 }
 
 function renderOperators() {
-  document.querySelector("#operator-list").innerHTML = operators
+  if (!state.operators.length) {
+    renderEmpty("#operator-list", "Nenhum operador importado do grupo GG-IAM-OPERADORES.");
+    renderEmpty("#operator-profile", "Aguardando sincronização de operadores.");
+    renderEmpty("#permission-grid", "");
+    return;
+  }
+
+  if (!state.selectedOperatorId) state.selectedOperatorId = state.operators[0].identity_id;
+
+  document.querySelector("#operator-list").innerHTML = state.operators
     .map(
       (operator) => `
-        <button class="operator-card ${operator.id === selectedOperatorId ? "is-selected" : ""}" type="button" data-operator-id="${operator.id}">
-          <span class="avatar">${initials(operator.name)}</span>
+        <button class="operator-card ${operator.identity_id === state.selectedOperatorId ? "is-selected" : ""}" type="button" data-operator-id="${operator.identity_id}">
+          <span class="avatar">${initials(operator.display_name || operator.username)}</span>
           <span>
-            <strong>${operator.name}</strong>
-            <small>${operator.role}</small>
+            <strong>${operator.display_name || operator.username}</strong>
+            <small>${operator.title || "Operador IAM"}</small>
           </span>
-          <span class="badge ${operator.status}">${statusLabels[operator.status]}</span>
+          <span class="badge ${operator.status === "pending" ? "review" : "active"}">${statusLabel(operator.status)}</span>
         </button>
       `,
     )
@@ -601,21 +485,23 @@ function renderOperators() {
 
 function renderOperatorDetail() {
   const operator = selectedOperator();
-  const enabledCount = permissions.filter((permission) => operator.permissions[permission.key]).length;
+  if (!operator) return;
+
+  const operatorPermissions = parsePermissions(operator.permissions_json);
+  const enabledCount = permissions.filter((permission) => operatorPermissions[permission.key]).length;
 
   document.querySelector("#operator-profile").innerHTML = `
-    <div class="identity-avatar">${initials(operator.name)}</div>
+    <div class="identity-avatar">${initials(operator.display_name || operator.username)}</div>
     <div>
-      <p class="eyebrow">${operator.role}</p>
-      <h3>${operator.name}</h3>
-      <span>${operator.email}</span>
-      <span>Escopo: ${operator.scope}</span>
+      <p class="eyebrow">${operator.title || "Operador IAM"}</p>
+      <h3>${operator.display_name || operator.username}</h3>
+      <span>${operator.email || ""}</span>
+      <span>Departamento: ${operator.department || "-"}</span>
     </div>
     <div class="operator-stats">
-      <span class="badge ${operator.status}">${statusLabels[operator.status]}</span>
-      <span class="badge ${operator.mfa === "Ativo" ? "active" : "review"}">MFA ${operator.mfa}</span>
+      <span class="badge ${operator.status === "pending" ? "review" : "active"}">${statusLabel(operator.status)}</span>
       <strong>${enabledCount}/${permissions.length}</strong>
-      <small>permissoes ativas</small>
+      <small>permissões ativas</small>
     </div>
   `;
 
@@ -623,7 +509,7 @@ function renderOperatorDetail() {
     .map(
       (permission) => `
         <label class="permission-item">
-          <input type="checkbox" data-permission-key="${permission.key}" ${operator.permissions[permission.key] ? "checked" : ""} />
+          <input type="checkbox" data-permission-key="${permission.key}" ${operatorPermissions[permission.key] ? "checked" : ""} />
           <span>
             <strong>${permission.title}</strong>
             <small>${permission.description}</small>
@@ -635,17 +521,59 @@ function renderOperatorDetail() {
 }
 
 function renderAudit() {
-  document.querySelector("#audit-feed").innerHTML = audits
-    .map(
-      (item) => `
-        <li>
-          <span class="audit-time">${item.time}</span>
-          <strong>${item.event}</strong>
-          <span class="badge low">${item.actor}</span>
-        </li>
-      `,
-    )
-    .join("");
+  document.querySelector("#audit-feed").innerHTML = state.syncRuns.length
+    ? state.syncRuns
+        .map(
+          (run) => `
+            <li>
+              <span class="audit-time">${formatSyncTime(run.started_at)}</span>
+              <strong>Sincronização AD ${run.status}</strong>
+              <span class="badge ${run.status === "success" ? "active" : "review"}">${run.users_synced || 0} usuários</span>
+            </li>
+          `,
+        )
+        .join("")
+    : `<li><span class="audit-time">-</span><strong>Nenhuma sincronização registrada</strong><span class="badge review">Pendente</span></li>`;
+}
+
+function renderAll() {
+  renderMetrics();
+  renderReviews();
+  renderDirectoryIndicators();
+  renderIdentities();
+  renderAccess();
+  renderCriticalPermissions();
+  renderOperators();
+  renderAudit();
+}
+
+async function loadData() {
+  state.loading = true;
+  try {
+    const [identities, groups, operators, critical, syncRuns] = await Promise.all([
+      apiGet("/api/identities"),
+      apiGet("/api/groups"),
+      apiGet("/api/operators"),
+      apiGet("/api/critical-permissions"),
+      apiGet("/api/sync-runs"),
+    ]);
+
+    state.identities = identities;
+    state.groups = groups;
+    state.operators = operators;
+    state.critical = critical;
+    state.syncRuns = syncRuns;
+    state.selectedIdentityId = identities[0]?.id || null;
+    state.selectedOperatorId = operators[0]?.identity_id || null;
+    state.apiOnline = true;
+    renderAll();
+  } catch (error) {
+    state.apiOnline = false;
+    renderAll();
+    showToast(`API indisponível: ${error.message}`);
+  } finally {
+    state.loading = false;
+  }
 }
 
 function switchView(viewName) {
@@ -656,6 +584,15 @@ function switchView(viewName) {
     const activeView = viewName === "identity-detail" ? "identities" : viewName;
     item.classList.toggle("is-active", item.dataset.view === activeView);
   });
+}
+
+async function openIdentityDetail(identityId) {
+  await renderIdentityDetail(identityId);
+  switchView("identity-detail");
+}
+
+function readonlyNotice(action) {
+  showToast(`${action} será liberado em uma próxima etapa. O backend atual está em modo somente leitura.`);
 }
 
 function bindEvents() {
@@ -669,7 +606,7 @@ function bindEvents() {
 
   document.querySelectorAll(".chip").forEach((button) => {
     button.addEventListener("click", () => {
-      activeFilter = button.dataset.filter;
+      state.activeFilter = button.dataset.filter;
       document.querySelectorAll(".chip").forEach((chip) => chip.classList.remove("is-active"));
       button.classList.add("is-active");
       renderIdentities();
@@ -683,9 +620,7 @@ function bindEvents() {
     const row = event.target.closest("[data-identity-id]");
     const identityId = openButton?.dataset.openIdentity || row?.dataset.identityId;
 
-    if (identityId) {
-      openIdentityDetail(identityId);
-    }
+    if (identityId) openIdentityDetail(identityId);
   });
 
   document.querySelector("#critical-table").addEventListener("click", (event) => {
@@ -693,164 +628,67 @@ function bindEvents() {
     const row = event.target.closest("[data-critical-identity-id]");
     const identityId = openButton?.dataset.openCritical || row?.dataset.criticalIdentityId;
 
-    if (identityId) {
-      openIdentityDetail(identityId);
-    }
-  });
-
-  document.querySelector("#identity-groups").addEventListener("click", (event) => {
-    const removeButton = event.target.closest("[data-remove-group]");
-    if (!removeButton) return;
-
-    const user = selectedIdentity();
-    user.groups = user.groups.filter((group) => group !== removeButton.dataset.removeGroup);
-    user.access = Math.max(0, user.access - 1);
-    renderIdentityDetail();
-    renderIdentities();
-    renderCriticalPermissions();
-    renderMetrics();
-    showToast(`Grupo ${removeButton.dataset.removeGroup} removido de ${user.name}.`);
+    if (identityId) openIdentityDetail(identityId);
   });
 
   document.querySelector("#operator-list").addEventListener("click", (event) => {
     const operatorButton = event.target.closest("[data-operator-id]");
     if (!operatorButton) return;
-
-    selectedOperatorId = operatorButton.dataset.operatorId;
+    state.selectedOperatorId = operatorButton.dataset.operatorId;
     renderOperators();
   });
 
   document.querySelector("#permission-grid").addEventListener("change", (event) => {
-    const permissionInput = event.target.closest("[data-permission-key]");
-    if (!permissionInput) return;
-
-    const operator = selectedOperator();
-    operator.permissions[permissionInput.dataset.permissionKey] = permissionInput.checked;
-    renderOperatorDetail();
+    if (event.target.closest("[data-permission-key]")) {
+      event.target.checked = !event.target.checked;
+      readonlyNotice("Alteração de permissões");
+    }
   });
 
-  document.querySelectorAll("[data-operator-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const messages = {
-        create: "Novos operadores serao importados do grupo GG-IAM-OPERADORES via LDAP.",
-        save: `Permissoes de ${selectedOperator().name} salvas no frontend.`,
-      };
-      showToast(messages[button.dataset.operatorAction] || "Acao do operador registrada.");
-    });
+  document.querySelector("#identity-groups").addEventListener("click", (event) => {
+    if (event.target.closest("[data-readonly-action]")) {
+      readonlyNotice("Remoção de grupo");
+    }
   });
 
   document.querySelectorAll("[data-identity-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const user = selectedIdentity();
+    button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
+  });
 
-      if (button.dataset.identityAction === "block") {
-        user.status = "blocked";
-        renderIdentityDetail();
-        renderIdentities();
-        renderCriticalPermissions();
-        renderMetrics();
-        showToast(`${user.name} bloqueado com sucesso.`);
-        return;
-      }
-
-      if (button.dataset.identityAction === "unlock") {
-        user.status = "active";
-        renderIdentityDetail();
-        renderIdentities();
-        renderCriticalPermissions();
-        renderMetrics();
-        showToast(`${user.name} desbloqueado com sucesso.`);
-        return;
-      }
-
-      if (button.dataset.identityAction === "disable") {
-        user.status = user.status === "disabled" ? "active" : "disabled";
-        renderIdentityDetail();
-        renderIdentities();
-        renderCriticalPermissions();
-        renderMetrics();
-        showToast(`${user.name} ${user.status === "disabled" ? "desabilitado" : "habilitado"} no frontend.`);
-        return;
-      }
-
-      if (button.dataset.identityAction === "password") {
-        user.passwordAge = "0 dias";
-        renderIdentityDetail();
-        showToast(`Redefinicao de senha preparada para ${user.name}.`);
-        return;
-      }
-
-      if (button.dataset.identityAction === "sessions") {
-        user.events.unshift("Sessoes encerradas pelo administrador");
-        renderIdentityDetail();
-        showToast(`Sessoes de ${user.name} encerradas.`);
-        return;
-      }
-
-      if (button.dataset.identityAction === "review") {
-        user.status = "review";
-        renderIdentityDetail();
-        renderIdentities();
-        renderCriticalPermissions();
-        showToast(`Revisao operacional iniciada para ${user.name}.`);
-        return;
-      }
-
-      if (button.dataset.identityAction === "revoke") {
-        user.groups = [];
-        user.apps = [];
-        user.access = 0;
-        user.risk = "low";
-        renderIdentityDetail();
-        renderIdentities();
-        renderCriticalPermissions();
-        renderMetrics();
-        showToast(`Grupos de ${user.name} removidos no frontend.`);
-        return;
-      }
-
-      if (button.dataset.identityAction === "add-group") {
-        const groupSelect = document.querySelector("#group-select");
-        const group = groupSelect.value;
-        if (!group) {
-          showToast("Nao ha grupos disponiveis para adicionar.");
-          return;
-        }
-        user.groups.push(group);
-        user.access += 1;
-        renderIdentityDetail();
-        renderIdentities();
-        renderCriticalPermissions();
-        renderMetrics();
-        showToast(`Grupo ${group} adicionado a ${user.name}.`);
-      }
-    });
+  document.querySelectorAll("[data-operator-action]").forEach((button) => {
+    button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
   });
 
   document.querySelectorAll("[data-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const messages = {
-        sync: "Sincronizacao AD colocada na fila.",
-        "invite-user": "Criacao de usuario no AD sera conectada ao backend.",
-        "map-app": "Mapeamento de grupo AD sera conectado ao backend.",
-        "export-audit": "Exportacao sera gerada pela API de auditoria.",
-        "export-critical": "Relatorio de permissoes criticas sera gerado pelo backend.",
-      };
-      showToast(messages[button.dataset.action] || "Acao registrada.");
+    button.addEventListener("click", async () => {
+      if (button.dataset.action === "sync") {
+        button.disabled = true;
+        showToast("Sincronização AD iniciada. Aguarde o retorno da API.");
+        try {
+          const result = await apiPost("/api/sync/ad");
+          showToast(`Sincronização concluída: ${result.users_synced} usuários e ${result.groups_synced} grupos.`);
+          await loadData();
+        } catch (error) {
+          showToast(`Falha na sincronização: ${error.message}`);
+        } finally {
+          button.disabled = false;
+        }
+        return;
+      }
+
+      if (button.dataset.action === "export-audit" || button.dataset.action === "export-critical") {
+        readonlyNotice("Exportação");
+        return;
+      }
+
+      readonlyNotice(button.textContent.trim());
     });
   });
 }
 
 function init() {
-  renderMetrics();
-  renderReviews();
-  renderRiskBars();
-  renderIdentities();
-  renderAccess();
-  renderCriticalPermissions();
-  renderOperators();
-  renderAudit();
   bindEvents();
+  loadData();
 }
 
 init();

@@ -7,5 +7,5 @@ function showToast(message) {
 }
 
 document.querySelector("[data-login-action='ldap']").addEventListener("click", () => {
-  showToast("Autenticacao LDAP sera conectada na etapa de backend.");
+  showToast("Autenticação LDAP será conectada na etapa de backend.");
 });

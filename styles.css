@@ -416,6 +416,18 @@ button:disabled {
   align-items: center;
 }
 
+.empty-state {
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #fbfdff;
+  text-align: center;
+}
+
 .review-item strong,
 .review-item span,
 .access-card strong,
