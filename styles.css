@@ -546,6 +546,16 @@ button:disabled {
   background: var(--green);
 }
 
+.badge.success,
+.badge.sync-status.success {
+  color: #ffffff;
+  background: var(--green);
+}
+
+.badge.sync-status {
+  color: #ffffff;
+}
+
 .badge.medium,
 .badge.review {
   background: var(--amber);

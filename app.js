@@ -167,6 +167,10 @@ function formatSyncTime(value) {
   return date.toLocaleString("pt-BR");
 }
 
+function latestSyncRun() {
+  return state.syncRuns[0] || null;
+}
+
 function renderEmpty(targetSelector, message) {
   document.querySelector(targetSelector).innerHTML = `<div class="empty-state">${message}</div>`;
 }
@@ -203,11 +207,26 @@ function renderReviews() {
             <strong>Sincronização ${statusLabel(run.status)}</strong>
             <span>${formatSyncTime(run.started_at)} - ${run.users_synced || 0} usuários, ${run.groups_synced || 0} grupos</span>
           </div>
-          <span class="badge ${run.status === "success" ? "active" : "review"}">${run.status}</span>
+          <span class="badge sync-status ${run.status === "success" ? "success" : "review"}">${run.status}</span>
         </article>
       `,
     )
     .join("");
+}
+
+function renderSidebarSyncStatus() {
+  const latest = latestSyncRun();
+  const statusEl = document.querySelector("#sidebar-sync-status");
+  const lastSyncEl = document.querySelector("#sidebar-last-sync");
+
+  if (!latest) {
+    statusEl.textContent = "Sincronização pendente";
+    lastSyncEl.textContent = "Última leitura: sem registro";
+    return;
+  }
+
+  statusEl.textContent = latest.status === "success" ? "Sincronização concluída" : `Sincronização ${latest.status}`;
+  lastSyncEl.textContent = `Última leitura: ${formatSyncTime(latest.finished_at || latest.started_at)}`;
 }
 
 function renderDirectoryIndicators() {
@@ -658,7 +677,7 @@ function renderAudit() {
             <li>
               <span class="audit-time">${formatSyncTime(run.started_at)}</span>
               <strong>Sincronização AD ${run.status}</strong>
-              <span class="badge ${run.status === "success" ? "active" : "review"}">${run.users_synced || 0} usuários</span>
+              <span class="badge sync-status ${run.status === "success" ? "success" : "review"}">${run.users_synced || 0} usuários</span>
             </li>
           `,
         )
@@ -668,6 +687,7 @@ function renderAudit() {
 
 function renderAll() {
   renderMetrics();
+  renderSidebarSyncStatus();
   renderReviews();
   renderDirectoryIndicators();
   renderIdentities();
