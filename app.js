@@ -126,7 +126,7 @@ async function logout(reason = "manual") {
     sessionStorage.setItem("IAM_LOGOUT_REASON", "Sua sessão expirou por inatividade.");
   }
 
-  window.location.href = "login.html";
+  window.location.href = "/login.html";
 }
 
 function resetSessionTimer() {

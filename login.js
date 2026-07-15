@@ -39,18 +39,18 @@ document.querySelector("#login-form").addEventListener("submit", async (event) =
   }
 
   submitButton.disabled = true;
-  submitButton.textContent = "Validando LDAP...";
+  submitButton.textContent = "Entrando...";
 
   try {
     await loginWithLdap(username, password);
-    window.location.href = "index.html";
+    window.location.href = "/inicio/";
   } catch (error) {
     showToast(error.message);
     form.elements.password.value = "";
     form.elements.password.focus();
   } finally {
     submitButton.disabled = false;
-    submitButton.textContent = "Entrar via LDAP";
+    submitButton.textContent = "Entrar";
   }
 });
 
