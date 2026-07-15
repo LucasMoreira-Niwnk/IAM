@@ -50,6 +50,7 @@ class LdapAuthenticatedUser:
     email: str | None
     upn: str | None
     distinguished_name: str
+    access_level: str
 
 
 class ReadOnlyLdapClient:
@@ -111,7 +112,8 @@ class ReadOnlyLdapClient:
         if not self._bind_as_user(login, password, user_dn, user_upn):
             return None
 
-        if not self._has_iam_access(user):
+        access_level = self._iam_access_level(user)
+        if not access_level:
             return None
 
         return LdapAuthenticatedUser(
@@ -120,6 +122,7 @@ class ReadOnlyLdapClient:
             email=self._first(user.get("mail")),
             upn=self._first(user.get("userPrincipalName")),
             distinguished_name=user_dn,
+            access_level=access_level,
         )
 
     def _bind_as_user(self, login: str, password: str, user_dn: str, user_upn: str) -> bool:
@@ -172,8 +175,14 @@ class ReadOnlyLdapClient:
             return connection.entries[0].entry_attributes_as_dict
 
     def _has_iam_access(self, user: dict[str, Any]) -> bool:
-        groups = [self.settings.ldap_operator_group, self.settings.ldap_viewonly_group]
-        return any(self._is_member_of_group(user, group) for group in groups if group.strip())
+        return self._iam_access_level(user) is not None
+
+    def _iam_access_level(self, user: dict[str, Any]) -> str | None:
+        if self.settings.ldap_operator_group.strip() and self._is_member_of_group(user, self.settings.ldap_operator_group):
+            return "admin_full"
+        if self.settings.ldap_viewonly_group.strip() and self._is_member_of_group(user, self.settings.ldap_viewonly_group):
+            return "view_only"
+        return None
 
     def _is_member_of_group(self, user: dict[str, Any], expected_group: str) -> bool:
         expected = expected_group.strip().lower()

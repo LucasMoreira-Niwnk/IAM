@@ -76,6 +76,7 @@ def create_session_token(user: dict) -> str:
         "display_name": user.get("display_name"),
         "email": user.get("email"),
         "upn": user.get("upn"),
+        "access_level": user.get("access_level"),
         "exp": int(time.time()) + settings.session_ttl_seconds,
     }
     payload_raw = _b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
@@ -207,6 +208,14 @@ def permissions_from_ad_groups(connection, operator: dict | None) -> tuple[dict[
     return parse_permissions(operator.get("permissions_json")), operator.get("status") or "pending", "local"
 
 
+def permissions_from_access_level(access_level: str | None) -> tuple[dict[str, bool], str, str] | None:
+    if access_level == "admin_full":
+        return ALL_PERMISSIONS.copy(), "active", "ldap-login-admin-full"
+    if access_level == "view_only":
+        return VIEWONLY_PERMISSIONS.copy(), "active", "ldap-login-view-only"
+    return None
+
+
 def enrich_operator(connection, operator: dict) -> dict:
     permissions, status, source = permissions_from_ad_groups(connection, operator)
     return {
@@ -218,13 +227,19 @@ def enrich_operator(connection, operator: dict) -> dict:
 
 
 def operator_response(session: dict, operator: dict | None = None) -> dict:
-    permissions = parse_permissions(operator.get("permissions_json") if operator else None)
-    status = operator.get("status") if operator else "pending"
+    live_profile = permissions_from_access_level(session.get("access_level"))
+    if live_profile:
+        permissions, status, source = live_profile
+    else:
+        permissions = parse_permissions(operator.get("permissions_json") if operator else None)
+        status = operator.get("status") if operator else "pending"
+        source = operator.get("permission_source") if operator else "none"
     return {
         **session,
         "identity_id": operator.get("identity_id") if operator else None,
         "status": status,
         "permissions": permissions,
+        "permission_source": source,
         "is_admin": permissions.get("manageOperators", False),
     }
 
@@ -264,6 +279,7 @@ def ldap_login(payload: LdapLoginRequest, response: Response) -> dict:
         "email": user.email,
         "upn": user.upn,
         "distinguished_name": user.distinguished_name,
+        "access_level": user.access_level,
     }
     token = create_session_token(user_payload)
     response.set_cookie(

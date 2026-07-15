@@ -211,6 +211,8 @@ function permissionSourceLabel(source) {
   const labels = {
     "ad-admin-full": "Grupo AD: Admin full",
     "ad-view-only": "Grupo AD: Visualização",
+    "ldap-login-admin-full": "Login LDAP: Admin full",
+    "ldap-login-view-only": "Login LDAP: Visualização",
     local: "Permissões locais",
   };
   return labels[source] || "Sem grupo de permissão";
