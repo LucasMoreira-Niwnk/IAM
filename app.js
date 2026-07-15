@@ -9,6 +9,7 @@ const state = {
   operators: [],
   critical: { users_count: 0, groups_count: 0, users: [], groups: [] },
   syncRuns: [],
+  auditEvents: [],
   currentUser: null,
   selectedIdentityId: null,
   selectedIdentityGroups: [],
@@ -18,6 +19,7 @@ const state = {
   identityPageSize: 10,
   groupPage: 1,
   groupPageSize: 10,
+  auditOperatorFilter: "",
   loading: true,
   apiOnline: false,
 };
@@ -223,6 +225,15 @@ function permissionSourceLabel(source) {
     local: "Permissões locais",
   };
   return labels[source] || "Sem grupo de permissão";
+}
+
+function auditActionLabel(action) {
+  const labels = {
+    create_group: "Criação de grupo",
+    update_operator_permissions: "Alteração de permissões",
+    sync_ad: "Sincronização AD",
+  };
+  return labels[action] || action || "Evento";
 }
 
 function currentPermissions() {
@@ -778,19 +789,29 @@ function renderOperatorDetail() {
 }
 
 function renderAudit() {
-  document.querySelector("#audit-feed").innerHTML = state.syncRuns.length
-    ? state.syncRuns
-        .map(
-          (run) => `
+  const filter = state.auditOperatorFilter.trim().toLowerCase();
+  const events = state.auditEvents.filter((event) =>
+    [event.operator_username, event.operator_display_name].filter(Boolean).join(" ").toLowerCase().includes(filter),
+  );
+
+  document.querySelector("#audit-feed").innerHTML = events.length
+    ? events
+        .map((event) => {
+          const operator = event.operator_display_name || event.operator_username || "Sistema";
+          const target = event.target_name || event.target_dn || event.target_type || "-";
+          return `
             <li>
-              <span class="audit-time">${formatSyncTime(run.started_at)}</span>
-              <strong>Sincronização AD ${run.status}</strong>
-              <span class="badge sync-status ${run.status === "success" ? "success" : "review"}">${run.users_synced || 0} usuários</span>
+              <span class="audit-time">${formatSyncTime(event.occurred_at)}</span>
+              <div>
+                <strong>${auditActionLabel(event.action)}</strong>
+                <small>${operator} - ${target}</small>
+              </div>
+              <span class="badge sync-status ${event.status === "success" ? "success" : "review"}">${event.status}</span>
             </li>
-          `,
-        )
+          `;
+        })
         .join("")
-    : `<li><span class="audit-time">-</span><strong>Nenhuma sincronização registrada</strong><span class="badge review">Pendente</span></li>`;
+    : `<li><span class="audit-time">-</span><strong>Nenhum evento encontrado</strong><span class="badge review">Pendente</span></li>`;
 }
 
 function applyPermissionState() {
@@ -822,12 +843,13 @@ function renderAll() {
 async function loadData() {
   state.loading = true;
   try {
-    const [identities, groups, operators, critical, syncRuns, currentUser] = await Promise.all([
+    const [identities, groups, operators, critical, syncRuns, auditEvents, currentUser] = await Promise.all([
       apiGet("/api/identities"),
       apiGet("/api/groups"),
       apiGet("/api/operators"),
       apiGet("/api/critical-permissions"),
       apiGet("/api/sync-runs"),
+      apiGet("/api/audit-events"),
       apiGetOptional("/api/auth/me"),
     ]);
 
@@ -836,6 +858,7 @@ async function loadData() {
     state.operators = operators;
     state.critical = critical;
     state.syncRuns = syncRuns;
+    state.auditEvents = auditEvents;
     state.currentUser = currentUser;
     state.selectedIdentityId = identities[0]?.id || null;
     state.selectedOperatorId = operators[0]?.identity_id || null;
@@ -1078,8 +1101,10 @@ async function submitCreateGroup() {
   try {
     const result = await apiPost("/api/groups", payload);
     state.groups = [result.group, ...state.groups.filter((group) => group.id !== result.group.id)];
+    state.auditEvents = await apiGet("/api/audit-events");
     state.groupPage = 1;
     renderAccess();
+    renderAudit();
     closeModals();
     showToast(`Grupo ${result.group.name} criado no AD.`);
   } catch (error) {
@@ -1224,6 +1249,8 @@ function bindEvents() {
       }
       renderOperators();
       applyPermissionState();
+      state.auditEvents = await apiGet("/api/audit-events");
+      renderAudit();
       showToast("Permissões do operador atualizadas.");
     } catch (error) {
       checkbox.checked = !checkbox.checked;
@@ -1280,6 +1307,11 @@ function bindEvents() {
 
   document.querySelector("#group-ou-search").addEventListener("input", (event) => {
     renderGroupOuList(event.target.value);
+  });
+
+  document.querySelector("#audit-operator-filter").addEventListener("input", (event) => {
+    state.auditOperatorFilter = event.target.value;
+    renderAudit();
   });
 
   document.querySelector("#groups-modal").addEventListener("click", (event) => {

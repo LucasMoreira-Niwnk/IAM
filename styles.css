@@ -1020,6 +1020,16 @@ td {
   list-style: none;
 }
 
+.audit-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.audit-search {
+  min-width: min(320px, 32vw);
+}
+
 .audit-feed li {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr) auto;

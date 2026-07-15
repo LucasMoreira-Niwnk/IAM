@@ -272,6 +272,37 @@ def require_permission(connection, request: Request, permission: str) -> dict:
     return current
 
 
+def log_audit_event(
+    connection,
+    operator: dict | None,
+    action: str,
+    target_type: str | None = None,
+    target_name: str | None = None,
+    target_dn: str | None = None,
+    status: str = "success",
+    details: dict | None = None,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO audit_events (
+            occurred_at, operator_username, operator_display_name, action,
+            target_type, target_name, target_dn, status, details_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            now_iso(),
+            operator.get("username") if operator else None,
+            operator.get("display_name") if operator else None,
+            action,
+            target_type,
+            target_name,
+            target_dn,
+            status,
+            json.dumps(details or {}, ensure_ascii=False),
+        ),
+    )
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {
@@ -327,8 +358,19 @@ def auth_logout(response: Response) -> dict:
 def sync_ad(request: Request) -> dict:
     try:
         with db() as connection:
-            require_permission(connection, request, "syncAd")
-            return DirectorySyncService(settings, connection).sync_read_only()
+            operator = require_permission(connection, request, "syncAd")
+            result = DirectorySyncService(settings, connection).sync_read_only()
+            log_audit_event(
+                connection,
+                operator,
+                action="sync_ad",
+                target_type="directory",
+                target_name="Active Directory",
+                status="success",
+                details=result,
+            )
+            connection.commit()
+            return result
     except HTTPException:
         raise
     except Exception as exc:
@@ -388,7 +430,7 @@ def groups() -> list[dict]:
 @app.post("/api/groups")
 def create_group(payload: CreateGroupRequest, request: Request) -> dict:
     with db() as connection:
-        require_permission(connection, request, "manageGroups")
+        operator = require_permission(connection, request, "manageGroups")
         existing = connection.execute(
             """
             SELECT id
@@ -437,6 +479,21 @@ def create_group(payload: CreateGroupRequest, request: Request) -> dict:
                 synced_at,
             ),
         )
+        log_audit_event(
+            connection,
+            operator,
+            action="create_group",
+            target_type="group",
+            target_name=created["name"],
+            target_dn=created["distinguished_name"],
+            status="success",
+            details={
+                "description": created["description"],
+                "scope": created["scope"],
+                "type": created["type"],
+                "is_critical": payload.is_critical,
+            },
+        )
         connection.commit()
 
         return {
@@ -474,7 +531,7 @@ def operators() -> list[dict]:
 @app.post("/api/operators/{identity_id}/permissions")
 def update_operator_permissions(identity_id: str, payload: OperatorPermissionsRequest, request: Request) -> dict:
     with db() as connection:
-        require_permission(connection, request, "manageOperators")
+        current_operator = require_permission(connection, request, "manageOperators")
         row = connection.execute(
             """
             SELECT
@@ -510,6 +567,19 @@ def update_operator_permissions(identity_id: str, payload: OperatorPermissionsRe
             WHERE identity_id = ?
             """,
             (json.dumps(permissions), status, identity_id),
+        )
+        log_audit_event(
+            connection,
+            current_operator,
+            action="update_operator_permissions",
+            target_type="operator",
+            target_name=operator.get("display_name") or operator.get("username"),
+            status="success",
+            details={
+                "target_username": operator.get("username"),
+                "status": status,
+                "permissions": permissions,
+            },
         )
         connection.commit()
 
@@ -583,5 +653,30 @@ def sync_runs() -> list[dict]:
             ORDER BY id DESC
             LIMIT 20
             """,
+        ).fetchall()
+        return rows_to_dicts(rows)
+
+
+@app.get("/api/audit-events")
+def audit_events(request: Request, operator: str | None = None) -> list[dict]:
+    with db() as connection:
+        require_permission(connection, request, "viewAudit")
+        params: list[str] = []
+        where = ""
+        if operator:
+            params.append(f"%{operator.strip().lower()}%")
+            where = """
+            WHERE lower(coalesce(operator_username, '') || ' ' || coalesce(operator_display_name, '')) LIKE ?
+            """
+
+        rows = connection.execute(
+            f"""
+            SELECT *
+            FROM audit_events
+            {where}
+            ORDER BY id DESC
+            LIMIT 200
+            """,
+            params,
         ).fetchall()
         return rows_to_dicts(rows)

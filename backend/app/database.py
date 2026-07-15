@@ -53,6 +53,19 @@ CREATE TABLE IF NOT EXISTS sync_runs (
     error_message TEXT
 );
 
+CREATE TABLE IF NOT EXISTS audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at TEXT NOT NULL,
+    operator_username TEXT,
+    operator_display_name TEXT,
+    action TEXT NOT NULL,
+    target_type TEXT,
+    target_name TEXT,
+    target_dn TEXT,
+    status TEXT NOT NULL,
+    details_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE TABLE IF NOT EXISTS iam_operators (
     identity_id TEXT PRIMARY KEY,
     username TEXT NOT NULL,

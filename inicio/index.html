@@ -349,7 +349,13 @@
                 <p class="eyebrow">Evidências</p>
                 <h2>Trilha de auditoria</h2>
               </div>
-              <button class="ghost-button" type="button" data-action="export-audit">Exportar CSV</button>
+              <div class="audit-actions">
+                <label class="search audit-search">
+                  <span aria-hidden="true">S</span>
+                  <input id="audit-operator-filter" type="search" placeholder="Filtrar por operador" />
+                </label>
+                <button class="ghost-button" type="button" data-action="export-audit">Exportar CSV</button>
+              </div>
             </div>
             <ol class="audit-feed" id="audit-feed"></ol>
           </div>
