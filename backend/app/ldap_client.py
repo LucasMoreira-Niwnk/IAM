@@ -45,6 +45,10 @@ GROUP_SCOPE_TYPES = {
 SECURITY_ENABLED = 0x80000000
 
 
+def normalize_dn(dn: str) -> str:
+    return ",".join(part.strip().lower() for part in str(dn).split(",") if part.strip())
+
+
 @dataclass
 class LdapSearchResult:
     users: list[dict[str, Any]]
@@ -147,8 +151,10 @@ class ReadOnlyLdapClient:
             raise ValueError("Nome do grupo obrigatorio.")
         if not ou_dn.upper().startswith("OU="):
             raise ValueError("OU de destino invalida.")
-        if not ou_dn.lower().endswith(self.settings.ldap_base_dn.lower()):
-            raise ValueError("OU de destino fora da base LDAP configurada.")
+        if not normalize_dn(ou_dn).endswith(normalize_dn(self.settings.ldap_base_dn)):
+            raise ValueError(
+                f"OU de destino fora da base LDAP configurada. Base esperada: {self.settings.ldap_base_dn}"
+            )
 
         group_dn = f"CN={escape_rdn(group_name)},{ou_dn}"
         group_type_value = self._group_type_value(scope, group_type)

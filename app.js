@@ -971,8 +971,9 @@ function ouFromDistinguishedName(dn = "") {
     .map((part) => part.trim())
     .filter(Boolean);
   const ouParts = parts.filter((part) => part.toUpperCase().startsWith("OU="));
+  const domainParts = parts.filter((part) => part.toUpperCase().startsWith("DC="));
   if (!ouParts.length) return "";
-  return ouParts.join(",");
+  return [...ouParts, ...domainParts].join(",");
 }
 
 function ouDisplayName(ouDn) {
