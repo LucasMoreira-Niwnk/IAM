@@ -527,31 +527,31 @@
             </div>
             <label class="field">
               <span>Nome do grupo</span>
-              <input type="text" placeholder="GG-NOME-DO-GRUPO" />
+              <input id="create-group-name" type="text" placeholder="GG-NOME-DO-GRUPO" />
             </label>
             <label class="field">
               <span>Descrição</span>
-              <input type="text" placeholder="Finalidade do grupo" />
+              <input id="create-group-description" type="text" placeholder="Finalidade do grupo" />
             </label>
             <div class="form-grid">
               <label class="field">
                 <span>Escopo</span>
-                <select>
-                  <option>Global</option>
-                  <option>Universal</option>
-                  <option>Domain Local</option>
+                <select id="create-group-scope">
+                  <option value="global">Global</option>
+                  <option value="universal">Universal</option>
+                  <option value="domain_local">Domain Local</option>
                 </select>
               </label>
               <label class="field">
                 <span>Tipo</span>
-                <select>
-                  <option>Segurança</option>
-                  <option>Distribuição</option>
+                <select id="create-group-type">
+                  <option value="security">Segurança</option>
+                  <option value="distribution">Distribuição</option>
                 </select>
               </label>
             </div>
             <label class="check-row">
-              <input type="checkbox" />
+              <input id="create-group-critical" type="checkbox" />
               <span>Marcar como grupo crítico no IAM</span>
             </label>
           </section>
@@ -571,7 +571,7 @@
 
         <div class="modal-footer">
           <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
-          <button class="primary-button" type="button" data-readonly-submit="create-group">Preparar criação</button>
+          <button class="primary-button" type="button" id="create-group-submit">Criar grupo</button>
         </div>
       </section>
     </div>

@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,10 +56,23 @@ class OperatorPermissionsRequest(BaseModel):
     status: str | None = None
 
 
+class CreateGroupRequest(BaseModel):
+    name: str
+    description: str | None = None
+    target_ou: str
+    scope: str
+    group_type: str
+    is_critical: bool = False
+
+
 def db():
     connection = connect(settings.database_path)
     init_db(connection)
     return connection
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _b64url(data: bytes) -> str:
@@ -369,6 +383,74 @@ def groups() -> list[dict]:
             """,
         ).fetchall()
         return rows_to_dicts(rows)
+
+
+@app.post("/api/groups")
+def create_group(payload: CreateGroupRequest, request: Request) -> dict:
+    with db() as connection:
+        require_permission(connection, request, "manageGroups")
+        existing = connection.execute(
+            """
+            SELECT id
+            FROM ad_groups
+            WHERE lower(name) = lower(?)
+               OR lower(distinguished_name) = lower(?)
+            LIMIT 1
+            """,
+            (payload.name.strip(), f"CN={payload.name.strip()},{payload.target_ou.strip()}"),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Grupo ja existe no cache local.")
+
+        try:
+            created = ReadOnlyLdapClient(settings).create_group(
+                name=payload.name,
+                target_ou=payload.target_ou,
+                description=payload.description,
+                scope=payload.scope,
+                group_type=payload.group_type,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        synced_at = now_iso()
+        connection.execute(
+            """
+            INSERT INTO ad_groups (
+                id, name, description, distinguished_name, is_critical, synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                description = excluded.description,
+                distinguished_name = excluded.distinguished_name,
+                is_critical = excluded.is_critical,
+                synced_at = excluded.synced_at
+            """,
+            (
+                created["distinguished_name"],
+                created["name"],
+                created["description"],
+                created["distinguished_name"],
+                1 if payload.is_critical else 0,
+                synced_at,
+            ),
+        )
+        connection.commit()
+
+        return {
+            "ok": True,
+            "group": {
+                "id": created["distinguished_name"],
+                "name": created["name"],
+                "description": created["description"],
+                "distinguished_name": created["distinguished_name"],
+                "is_critical": 1 if payload.is_critical else 0,
+                "member_count": 0,
+                "synced_at": synced_at,
+            },
+        }
 
 
 @app.get("/api/operators")

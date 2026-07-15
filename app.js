@@ -110,7 +110,14 @@ async function apiPost(path, payload = null) {
   });
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(detail || `POST ${path} retornou ${response.status}`);
+    let message = detail || `POST ${path} retornou ${response.status}`;
+    try {
+      const parsed = JSON.parse(detail);
+      message = parsed.detail || message;
+    } catch {
+      // Mantem a mensagem de texto original quando a resposta nao for JSON.
+    }
+    throw new Error(message);
   }
   return response.json();
 }
@@ -992,7 +999,7 @@ function renderOuList({ records, listSelector, countSelector, searchTerm = "", e
         .map(
           (ou, index) => `
             <label class="ou-card">
-              <input type="radio" name="${listSelector.replace("#", "")}" ${index === 0 ? "checked" : ""} />
+              <input type="radio" name="${listSelector.replace("#", "")}" value="${ou}" ${index === 0 ? "checked" : ""} />
               <span>
                 <strong>${ouDisplayName(ou)}</strong>
                 <small>${ou}</small>
@@ -1035,9 +1042,51 @@ function openCreateUserModal() {
 function openCreateGroupModal() {
   const searchInput = document.querySelector("#group-ou-search");
   searchInput.value = "";
+  document.querySelector("#create-group-name").value = "";
+  document.querySelector("#create-group-description").value = "";
+  document.querySelector("#create-group-scope").value = "global";
+  document.querySelector("#create-group-type").value = "security";
+  document.querySelector("#create-group-critical").checked = false;
   renderGroupOuList();
   openModal("#create-group-modal");
-  window.setTimeout(() => document.querySelector("#create-group-modal input").focus(), 0);
+  window.setTimeout(() => document.querySelector("#create-group-name").focus(), 0);
+}
+
+function selectedGroupOu() {
+  return document.querySelector("#group-ou-list input[type='radio']:checked")?.value || "";
+}
+
+async function submitCreateGroup() {
+  const submitButton = document.querySelector("#create-group-submit");
+  const payload = {
+    name: document.querySelector("#create-group-name").value.trim(),
+    description: document.querySelector("#create-group-description").value.trim(),
+    target_ou: selectedGroupOu(),
+    scope: document.querySelector("#create-group-scope").value,
+    group_type: document.querySelector("#create-group-type").value,
+    is_critical: document.querySelector("#create-group-critical").checked,
+  };
+
+  if (!payload.name || !payload.target_ou) {
+    showToast("Informe o nome do grupo e selecione uma OU de destino.");
+    return;
+  }
+
+  submitButton.disabled = true;
+  submitButton.textContent = "Criando...";
+  try {
+    const result = await apiPost("/api/groups", payload);
+    state.groups = [result.group, ...state.groups.filter((group) => group.id !== result.group.id)];
+    state.groupPage = 1;
+    renderAccess();
+    closeModals();
+    showToast(`Grupo ${result.group.name} criado no AD.`);
+  } catch (error) {
+    showToast(`Falha ao criar grupo: ${error.message}`);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Criar grupo";
+  }
 }
 
 function bindEvents() {
@@ -1243,9 +1292,11 @@ function bindEvents() {
     button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
   });
 
-  document.querySelectorAll("#create-user-modal [data-readonly-submit], #create-group-modal [data-readonly-submit]").forEach((button) => {
+  document.querySelectorAll("#create-user-modal [data-readonly-submit]").forEach((button) => {
     button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
   });
+
+  document.querySelector("#create-group-submit").addEventListener("click", submitCreateGroup);
 
   document.querySelectorAll("[data-operator-action]").forEach((button) => {
     button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
