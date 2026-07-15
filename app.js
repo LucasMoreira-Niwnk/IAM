@@ -6,6 +6,7 @@ const state = {
   operators: [],
   critical: { users_count: 0, groups_count: 0, users: [], groups: [] },
   syncRuns: [],
+  currentUser: null,
   selectedIdentityId: null,
   selectedIdentityGroups: [],
   selectedOperatorId: null,
@@ -94,6 +95,14 @@ async function apiPost(path) {
     throw new Error(detail || `POST ${path} retornou ${response.status}`);
   }
   return response.json();
+}
+
+async function apiGetOptional(path) {
+  try {
+    return await apiGet(path);
+  } catch {
+    return null;
+  }
 }
 
 function showToast(message) {
@@ -188,6 +197,28 @@ function renderMetrics() {
   document.querySelector("#metric-privileged").textContent = state.critical.users_count || 0;
   document.querySelector("#metric-operations").textContent = operationsToday;
   document.querySelector("#metric-operators").textContent = state.operators.length;
+}
+
+function currentUserName() {
+  if (state.currentUser?.display_name) return state.currentUser.display_name;
+  if (state.currentUser?.name) return state.currentUser.name;
+  if (state.currentUser?.username) return state.currentUser.username;
+  if (state.operators[0]?.display_name) return state.operators[0].display_name;
+  if (state.operators[0]?.username) return state.operators[0].username;
+  return "Operador IAM";
+}
+
+function renderCurrentUser() {
+  const name = currentUserName();
+  const role =
+    state.currentUser?.role ||
+    state.currentUser?.title ||
+    state.operators.find((operator) => operator.display_name === name || operator.username === name)?.title ||
+    "Service Desk";
+
+  document.querySelector("#current-user-avatar").textContent = initials(name);
+  document.querySelector("#current-user-name").textContent = name;
+  document.querySelector("#current-user-role").textContent = role || "Service Desk";
 }
 
 function renderReviews() {
@@ -687,6 +718,7 @@ function renderAudit() {
 
 function renderAll() {
   renderMetrics();
+  renderCurrentUser();
   renderSidebarSyncStatus();
   renderReviews();
   renderDirectoryIndicators();
@@ -701,12 +733,13 @@ function renderAll() {
 async function loadData() {
   state.loading = true;
   try {
-    const [identities, groups, operators, critical, syncRuns] = await Promise.all([
+    const [identities, groups, operators, critical, syncRuns, currentUser] = await Promise.all([
       apiGet("/api/identities"),
       apiGet("/api/groups"),
       apiGet("/api/operators"),
       apiGet("/api/critical-permissions"),
       apiGet("/api/sync-runs"),
+      apiGetOptional("/api/auth/me"),
     ]);
 
     state.identities = identities;
@@ -714,6 +747,7 @@ async function loadData() {
     state.operators = operators;
     state.critical = critical;
     state.syncRuns = syncRuns;
+    state.currentUser = currentUser;
     state.selectedIdentityId = identities[0]?.id || null;
     state.selectedOperatorId = operators[0]?.identity_id || null;
     state.apiOnline = true;
@@ -894,6 +928,17 @@ function bindEvents() {
 
       readonlyNotice(button.textContent.trim());
     });
+  });
+
+  document.querySelector("#logout-button").addEventListener("click", async () => {
+    try {
+      await apiPost("/api/auth/logout");
+    } catch {
+      // O backend atual ainda pode não ter autenticação. Mesmo assim, limpamos o estado local.
+    }
+
+    localStorage.removeItem("IAM_API_BASE_URL");
+    window.location.href = "login.html";
   });
 }
 

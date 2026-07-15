@@ -370,6 +370,57 @@ button:disabled {
   border-color: var(--line);
 }
 
+.user-menu {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.user-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.user-summary strong,
+.user-summary small {
+  display: block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-summary small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.user-avatar {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  color: #ffffff;
+  background: var(--blue);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.logout-button {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
 .status-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1185,8 +1236,8 @@ td {
 .login-page {
   min-height: 100vh;
   background:
-    linear-gradient(120deg, rgba(22, 32, 43, 0.92), rgba(0, 124, 122, 0.86)),
-    url("https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1800&q=80");
+    linear-gradient(120deg, rgba(0, 42, 70, 0.56), rgba(0, 78, 113, 0.28)),
+    url("assets/ct-tech-background.png");
   background-size: cover;
   background-position: center;
 }
@@ -1271,7 +1322,7 @@ td {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(244, 247, 251, 0.94);
+  background: rgba(244, 247, 251, 0.9);
 }
 
 .login-card {
@@ -1500,6 +1551,16 @@ td {
   .search {
     min-width: 0;
     width: 100%;
+  }
+
+  .user-menu {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .user-summary strong,
+  .user-summary small {
+    max-width: 52vw;
   }
 
   .status-strip,
