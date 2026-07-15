@@ -173,7 +173,12 @@ class ReadOnlyLdapClient:
                 attributes=attributes,
             )
             if not created:
-                message = connection.result.get("message") or connection.result.get("description") or "Falha LDAP ao criar grupo."
+                result_code = connection.result.get("result")
+                description_result = connection.result.get("description")
+                if result_code == 68 or description_result == "entryAlreadyExists":
+                    raise ValueError("Já existe um grupo com esse nome na OU selecionada.")
+
+                message = connection.result.get("message") or description_result or "Falha LDAP ao criar grupo."
                 raise RuntimeError(str(message))
 
         return {
