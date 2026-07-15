@@ -234,7 +234,7 @@
                 <p class="eyebrow">Active Directory</p>
                 <h2>Grupos do AD</h2>
               </div>
-              <button class="primary-button" type="button" data-action="map-app">Mapear grupo</button>
+              <button class="primary-button" type="button" data-action="map-app">Criar grupo no AD</button>
             </div>
             <div class="access-grid" id="access-grid"></div>
             <div class="pagination" id="group-pagination" aria-label="Paginação de grupos do AD"></div>
@@ -429,6 +429,149 @@
         <div class="modal-footer">
           <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
           <button class="primary-button" type="button" data-readonly-submit="groups">Preparar alteração</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="create-user-modal" aria-hidden="true">
+      <section class="modal-card wide-modal" role="dialog" aria-modal="true" aria-labelledby="create-user-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Active Directory</p>
+            <h2 id="create-user-modal-title">Criar usuário</h2>
+          </div>
+          <button class="icon-button" type="button" data-modal-close aria-label="Fechar">X</button>
+        </div>
+
+        <div class="provision-form">
+          <section class="form-section">
+            <div class="module-header compact-header">
+              <h3>Dados da identidade</h3>
+            </div>
+            <div class="form-grid">
+              <label class="field">
+                <span>Nome</span>
+                <input type="text" placeholder="Nome" autocomplete="given-name" />
+              </label>
+              <label class="field">
+                <span>Sobrenome</span>
+                <input type="text" placeholder="Sobrenome" autocomplete="family-name" />
+              </label>
+              <label class="field">
+                <span>Usuário</span>
+                <input type="text" placeholder="usuario" autocomplete="username" />
+              </label>
+              <label class="field">
+                <span>E-mail</span>
+                <input type="email" placeholder="usuario@casaterra.local" autocomplete="email" />
+              </label>
+              <label class="field">
+                <span>Cargo</span>
+                <input type="text" placeholder="Cargo do colaborador" />
+              </label>
+              <label class="field">
+                <span>Departamento</span>
+                <input type="text" placeholder="Departamento" />
+              </label>
+            </div>
+            <div class="form-grid">
+              <label class="field">
+                <span>Senha inicial</span>
+                <input type="password" placeholder="Senha inicial" autocomplete="new-password" />
+              </label>
+              <label class="field">
+                <span>Confirmar senha</span>
+                <input type="password" placeholder="Confirme a senha inicial" autocomplete="new-password" />
+              </label>
+            </div>
+            <label class="check-row">
+              <input type="checkbox" checked />
+              <span>Usuário deve trocar a senha no próximo login</span>
+            </label>
+          </section>
+
+          <section class="form-section">
+            <div class="module-header compact-header">
+              <h3>OU de destino</h3>
+              <span id="user-ou-count">0</span>
+            </div>
+            <label class="search group-search">
+              <span aria-hidden="true">S</span>
+              <input id="user-ou-search" type="search" placeholder="Buscar OU de usuários" />
+            </label>
+            <div class="ou-list" id="user-ou-list"></div>
+          </section>
+        </div>
+
+        <div class="modal-footer">
+          <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
+          <button class="primary-button" type="button" data-readonly-submit="create-user">Preparar criação</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="create-group-modal" aria-hidden="true">
+      <section class="modal-card wide-modal" role="dialog" aria-modal="true" aria-labelledby="create-group-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Active Directory</p>
+            <h2 id="create-group-modal-title">Criar grupo</h2>
+          </div>
+          <button class="icon-button" type="button" data-modal-close aria-label="Fechar">X</button>
+        </div>
+
+        <div class="provision-form">
+          <section class="form-section">
+            <div class="module-header compact-header">
+              <h3>Dados do grupo</h3>
+            </div>
+            <label class="field">
+              <span>Nome do grupo</span>
+              <input type="text" placeholder="GG-NOME-DO-GRUPO" />
+            </label>
+            <label class="field">
+              <span>Descrição</span>
+              <input type="text" placeholder="Finalidade do grupo" />
+            </label>
+            <div class="form-grid">
+              <label class="field">
+                <span>Escopo</span>
+                <select>
+                  <option>Global</option>
+                  <option>Universal</option>
+                  <option>Domain Local</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Tipo</span>
+                <select>
+                  <option>Segurança</option>
+                  <option>Distribuição</option>
+                </select>
+              </label>
+            </div>
+            <label class="check-row">
+              <input type="checkbox" />
+              <span>Marcar como grupo crítico no IAM</span>
+            </label>
+          </section>
+
+          <section class="form-section">
+            <div class="module-header compact-header">
+              <h3>OU de destino</h3>
+              <span id="group-ou-count">0</span>
+            </div>
+            <label class="search group-search">
+              <span aria-hidden="true">S</span>
+              <input id="group-ou-search" type="search" placeholder="Buscar OU de grupos" />
+            </label>
+            <div class="ou-list" id="group-ou-list"></div>
+          </section>
+        </div>
+
+        <div class="modal-footer">
+          <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
+          <button class="primary-button" type="button" data-readonly-submit="create-group">Preparar criação</button>
         </div>
       </section>
     </div>

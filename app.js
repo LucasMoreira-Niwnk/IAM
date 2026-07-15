@@ -910,6 +910,88 @@ function openGroupsModal(groupName = "") {
   window.setTimeout(() => searchInput.focus(), 0);
 }
 
+function ouFromDistinguishedName(dn = "") {
+  const parts = String(dn)
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const ouParts = parts.filter((part) => part.toUpperCase().startsWith("OU="));
+  if (!ouParts.length) return "";
+  return ouParts.join(",");
+}
+
+function ouDisplayName(ouDn) {
+  return ouDn
+    .split(",")
+    .map((part) => part.replace(/^OU=/i, ""))
+    .join(" / ");
+}
+
+function uniqueOus(records) {
+  const ous = records
+    .map((record) => ouFromDistinguishedName(record.distinguished_name))
+    .filter(Boolean);
+  return [...new Set(ous)].sort((a, b) => ouDisplayName(a).localeCompare(ouDisplayName(b), "pt-BR"));
+}
+
+function renderOuList({ records, listSelector, countSelector, searchTerm = "", emptyText }) {
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const ous = uniqueOus(records).filter((ou) => `${ouDisplayName(ou)} ${ou}`.toLowerCase().includes(normalizedSearch));
+  document.querySelector(countSelector).textContent = `${ous.length} OU(s)`;
+  document.querySelector(listSelector).innerHTML = ous.length
+    ? ous
+        .slice(0, 40)
+        .map(
+          (ou, index) => `
+            <label class="ou-card">
+              <input type="radio" name="${listSelector.replace("#", "")}" ${index === 0 ? "checked" : ""} />
+              <span>
+                <strong>${ouDisplayName(ou)}</strong>
+                <small>${ou}</small>
+              </span>
+            </label>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">${emptyText}</div>`;
+}
+
+function renderUserOuList(searchTerm = "") {
+  renderOuList({
+    records: state.identities,
+    listSelector: "#user-ou-list",
+    countSelector: "#user-ou-count",
+    searchTerm,
+    emptyText: "Nenhuma OU de usuários encontrada no cache sincronizado.",
+  });
+}
+
+function renderGroupOuList(searchTerm = "") {
+  renderOuList({
+    records: state.groups,
+    listSelector: "#group-ou-list",
+    countSelector: "#group-ou-count",
+    searchTerm,
+    emptyText: "Nenhuma OU de grupos encontrada no cache sincronizado.",
+  });
+}
+
+function openCreateUserModal() {
+  const searchInput = document.querySelector("#user-ou-search");
+  searchInput.value = "";
+  renderUserOuList();
+  openModal("#create-user-modal");
+  window.setTimeout(() => document.querySelector("#create-user-modal input").focus(), 0);
+}
+
+function openCreateGroupModal() {
+  const searchInput = document.querySelector("#group-ou-search");
+  searchInput.value = "";
+  renderGroupOuList();
+  openModal("#create-group-modal");
+  window.setTimeout(() => document.querySelector("#create-group-modal input").focus(), 0);
+}
+
 function bindEvents() {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
@@ -1061,6 +1143,14 @@ function bindEvents() {
     renderGroupEditor(event.target.value);
   });
 
+  document.querySelector("#user-ou-search").addEventListener("input", (event) => {
+    renderUserOuList(event.target.value);
+  });
+
+  document.querySelector("#group-ou-search").addEventListener("input", (event) => {
+    renderGroupOuList(event.target.value);
+  });
+
   document.querySelector("#groups-modal").addEventListener("click", (event) => {
     const actionButton = event.target.closest("[data-readonly-submit]");
     if (actionButton) {
@@ -1069,6 +1159,10 @@ function bindEvents() {
   });
 
   document.querySelectorAll("#password-modal [data-readonly-submit]").forEach((button) => {
+    button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
+  });
+
+  document.querySelectorAll("#create-user-modal [data-readonly-submit], #create-group-modal [data-readonly-submit]").forEach((button) => {
     button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
   });
 
@@ -1090,6 +1184,16 @@ function bindEvents() {
         } finally {
           button.disabled = false;
         }
+        return;
+      }
+
+      if (button.dataset.action === "invite-user") {
+        openCreateUserModal();
+        return;
+      }
+
+      if (button.dataset.action === "map-app") {
+        openCreateGroupModal();
         return;
       }
 
