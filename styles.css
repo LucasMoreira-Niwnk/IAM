@@ -339,6 +339,10 @@ button:disabled {
   opacity: 0.48;
 }
 
+.is-permission-disabled {
+  cursor: not-allowed;
+}
+
 .danger-button {
   padding: 0 16px;
   color: #ffffff;

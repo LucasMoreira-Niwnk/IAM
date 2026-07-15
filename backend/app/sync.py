@@ -12,6 +12,18 @@ from .ldap_client import ReadOnlyLdapClient
 
 
 ACCOUNT_DISABLED_FLAG = 0x0002
+PERMISSION_KEYS = (
+    "viewIdentities",
+    "resetPassword",
+    "lockUnlock",
+    "manageGroups",
+    "managePrivilegedGroups",
+    "syncAd",
+    "manageOperators",
+    "viewAudit",
+)
+ALL_PERMISSIONS = {key: True for key in PERMISSION_KEYS}
+BOOTSTRAP_FULL_PERMISSION_USERS = {"lucas.salomao"}
 
 
 def now_iso() -> str:
@@ -189,6 +201,7 @@ class DirectorySyncService:
                     for group_dn in list_value(user.get("memberOf"))
                 )
                 if is_operator:
+                    operator_is_bootstrap_admin = username.lower() in BOOTSTRAP_FULL_PERMISSION_USERS
                     self.connection.execute(
                         """
                         INSERT INTO iam_operators (
@@ -199,6 +212,14 @@ class DirectorySyncService:
                             username = excluded.username,
                             display_name = excluded.display_name,
                             email = excluded.email,
+                            status = CASE
+                                WHEN lower(excluded.username) = 'lucas.salomao' THEN excluded.status
+                                ELSE iam_operators.status
+                            END,
+                            permissions_json = CASE
+                                WHEN lower(excluded.username) = 'lucas.salomao' THEN excluded.permissions_json
+                                ELSE iam_operators.permissions_json
+                            END,
                             last_seen_at = excluded.last_seen_at
                         """,
                         (
@@ -206,8 +227,8 @@ class DirectorySyncService:
                             username,
                             first(user.get("displayName")),
                             first(user.get("mail")),
-                            "pending",
-                            json.dumps({}),
+                            "active" if operator_is_bootstrap_admin else "pending",
+                            json.dumps(ALL_PERMISSIONS if operator_is_bootstrap_admin else {}),
                             synced_at,
                             synced_at,
                         ),

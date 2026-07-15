@@ -94,11 +94,19 @@ async function apiGet(path) {
   return response.json();
 }
 
-async function apiPost(path) {
-  const response = await fetch(apiUrl(path), {
+async function apiPost(path, payload = null) {
+  const options = {
     method: "POST",
     credentials: "include",
     headers: { Accept: "application/json" },
+  };
+  if (payload !== null) {
+    options.headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(payload);
+  }
+
+  const response = await fetch(apiUrl(path), {
+    ...options,
   });
   if (!response.ok) {
     const detail = await response.text();
@@ -197,6 +205,21 @@ function parsePermissions(raw) {
   } catch {
     return {};
   }
+}
+
+function currentPermissions() {
+  return parsePermissions(state.currentUser?.permissions);
+}
+
+function hasPermission(permissionKey) {
+  return Boolean(currentPermissions()[permissionKey]);
+}
+
+function disableByPermission(selector, permissionKey) {
+  document.querySelectorAll(selector).forEach((element) => {
+    element.disabled = !hasPermission(permissionKey);
+    element.classList.toggle("is-permission-disabled", !hasPermission(permissionKey));
+  });
 }
 
 function selectedIdentity() {
@@ -750,6 +773,17 @@ function renderAudit() {
     : `<li><span class="audit-time">-</span><strong>Nenhuma sincronização registrada</strong><span class="badge review">Pendente</span></li>`;
 }
 
+function applyPermissionState() {
+  disableByPermission("[data-action='sync']", "syncAd");
+  disableByPermission("[data-action='invite-user']", "manageOperators");
+  disableByPermission("[data-action='map-app']", "manageGroups");
+  disableByPermission("[data-identity-action='password']", "resetPassword");
+  disableByPermission("[data-identity-action='add-group'], [data-identity-action='revoke']", "manageGroups");
+  disableByPermission("[data-identity-action='block'], [data-identity-action='unlock'], [data-identity-action='disable'], [data-identity-action='sessions']", "lockUnlock");
+  disableByPermission("[data-view='operators'], [data-operator-action], #permission-grid input", "manageOperators");
+  disableByPermission("[data-action='export-audit']", "viewAudit");
+}
+
 function renderAll() {
   renderMetrics();
   renderCurrentUser();
@@ -762,6 +796,7 @@ function renderAll() {
   renderCriticalPermissions();
   renderOperators();
   renderAudit();
+  applyPermissionState();
 }
 
 async function loadData() {
@@ -1095,10 +1130,43 @@ function bindEvents() {
     renderOperators();
   });
 
-  document.querySelector("#permission-grid").addEventListener("change", (event) => {
-    if (event.target.closest("[data-permission-key]")) {
-      event.target.checked = !event.target.checked;
-      readonlyNotice("Alteração de permissões");
+  document.querySelector("#permission-grid").addEventListener("change", async (event) => {
+    const checkbox = event.target.closest("[data-permission-key]");
+    if (!checkbox) return;
+
+    if (!hasPermission("manageOperators")) {
+      checkbox.checked = !checkbox.checked;
+      showToast("Você não tem permissão para gerenciar operadores.");
+      return;
+    }
+
+    const operator = selectedOperator();
+    if (!operator) return;
+
+    const updatedPermissions = parsePermissions(operator.permissions_json);
+    updatedPermissions[checkbox.dataset.permissionKey] = checkbox.checked;
+    checkbox.disabled = true;
+
+    try {
+      const updatedOperator = await apiPost(`/api/operators/${operator.identity_id}/permissions`, {
+        permissions: updatedPermissions,
+        status: operator.status === "pending" ? "active" : operator.status,
+      });
+      state.operators = state.operators.map((item) =>
+        item.identity_id === updatedOperator.identity_id ? updatedOperator : item,
+      );
+      if (state.currentUser?.identity_id === updatedOperator.identity_id) {
+        state.currentUser.permissions = parsePermissions(updatedOperator.permissions_json);
+        state.currentUser.status = updatedOperator.status;
+      }
+      renderOperators();
+      applyPermissionState();
+      showToast("Permissões do operador atualizadas.");
+    } catch (error) {
+      checkbox.checked = !checkbox.checked;
+      showToast(`Falha ao salvar permissões: ${error.message}`);
+    } finally {
+      checkbox.disabled = false;
     }
   });
 

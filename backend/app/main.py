@@ -16,6 +16,19 @@ from .ldap_client import ReadOnlyLdapClient
 from .sync import DirectorySyncService
 
 
+PERMISSION_KEYS = (
+    "viewIdentities",
+    "resetPassword",
+    "lockUnlock",
+    "manageGroups",
+    "managePrivilegedGroups",
+    "syncAd",
+    "manageOperators",
+    "viewAudit",
+)
+ALL_PERMISSIONS = {key: True for key in PERMISSION_KEYS}
+BOOTSTRAP_FULL_PERMISSION_USERS = {"lucas.salomao"}
+
 app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
@@ -30,6 +43,11 @@ app.add_middleware(
 class LdapLoginRequest(BaseModel):
     username: str
     password: str
+
+
+class OperatorPermissionsRequest(BaseModel):
+    permissions: dict[str, bool]
+    status: str | None = None
 
 
 def db():
@@ -85,6 +103,97 @@ def read_session_token(token: str | None) -> dict | None:
     return payload
 
 
+def normalize_login(value: str | None) -> str:
+    value = (value or "").strip().lower()
+    if "\\" in value:
+        value = value.rsplit("\\", 1)[-1]
+    return value
+
+
+def is_bootstrap_admin(username: str | None) -> bool:
+    return normalize_login(username) in BOOTSTRAP_FULL_PERMISSION_USERS
+
+
+def parse_permissions(raw: str | None) -> dict[str, bool]:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return {key: bool(data.get(key)) for key in PERMISSION_KEYS}
+
+
+def sanitize_permissions(permissions: dict[str, bool]) -> dict[str, bool]:
+    return {key: bool(permissions.get(key)) for key in PERMISSION_KEYS}
+
+
+def session_from_request(request: Request) -> dict:
+    session = read_session_token(request.cookies.get(settings.session_cookie_name))
+    if not session:
+        raise HTTPException(status_code=401, detail="Sessão inválida ou expirada.")
+    return session
+
+
+def find_operator_for_session(connection, session: dict) -> dict | None:
+    identifiers = [
+        normalize_login(session.get("username")),
+        normalize_login(session.get("upn")),
+        normalize_login(session.get("email")),
+    ]
+    identifiers = [identifier for identifier in identifiers if identifier]
+    if not identifiers:
+        return None
+
+    placeholders = ",".join("?" for _ in identifiers)
+    row = connection.execute(
+        f"""
+        SELECT
+            o.*,
+            i.department,
+            i.title,
+            i.status AS ad_status
+        FROM iam_operators o
+        LEFT JOIN identities i ON i.id = o.identity_id
+        WHERE lower(o.username) IN ({placeholders})
+           OR lower(o.email) IN ({placeholders})
+        LIMIT 1
+        """,
+        (*identifiers, *identifiers),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def operator_response(session: dict, operator: dict | None = None) -> dict:
+    username = session.get("username")
+    permissions = parse_permissions(operator.get("permissions_json") if operator else None)
+    status = operator.get("status") if operator else "pending"
+
+    if is_bootstrap_admin(username) or is_bootstrap_admin(operator.get("username") if operator else None):
+        permissions = ALL_PERMISSIONS.copy()
+        status = "active"
+
+    return {
+        **session,
+        "identity_id": operator.get("identity_id") if operator else None,
+        "status": status,
+        "permissions": permissions,
+        "is_admin": permissions.get("manageOperators", False),
+    }
+
+
+def require_permission(connection, request: Request, permission: str) -> dict:
+    session = session_from_request(request)
+    operator = find_operator_for_session(connection, session)
+    current = operator_response(session, operator)
+
+    if current["status"] != "active":
+        raise HTTPException(status_code=403, detail="Operador pendente ou inativo no IAM.")
+    if not current["permissions"].get(permission):
+        raise HTTPException(status_code=403, detail="Operador sem permissão para esta ação.")
+    return current
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {
@@ -121,10 +230,9 @@ def ldap_login(payload: LdapLoginRequest, response: Response) -> dict:
 
 @app.get("/api/auth/me")
 def auth_me(request: Request) -> dict:
-    session = read_session_token(request.cookies.get(settings.session_cookie_name))
-    if not session:
-        raise HTTPException(status_code=401, detail="Sessão inválida ou expirada.")
-    return session
+    session = session_from_request(request)
+    with db() as connection:
+        return operator_response(session, find_operator_for_session(connection, session))
 
 
 @app.post("/api/auth/logout")
@@ -134,10 +242,13 @@ def auth_logout(response: Response) -> dict:
 
 
 @app.post("/api/sync/ad")
-def sync_ad() -> dict:
+def sync_ad(request: Request) -> dict:
     try:
         with db() as connection:
+            require_permission(connection, request, "syncAd")
             return DirectorySyncService(settings, connection).sync_read_only()
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -195,6 +306,16 @@ def groups() -> list[dict]:
 @app.get("/api/operators")
 def operators() -> list[dict]:
     with db() as connection:
+        connection.execute(
+            """
+            UPDATE iam_operators
+            SET status = 'active',
+                permissions_json = ?
+            WHERE lower(username) = ?
+            """,
+            (json.dumps(ALL_PERMISSIONS), "lucas.salomao"),
+        )
+        connection.commit()
         rows = connection.execute(
             """
             SELECT
@@ -208,6 +329,61 @@ def operators() -> list[dict]:
             """,
         ).fetchall()
         return rows_to_dicts(rows)
+
+
+@app.post("/api/operators/{identity_id}/permissions")
+def update_operator_permissions(identity_id: str, payload: OperatorPermissionsRequest, request: Request) -> dict:
+    with db() as connection:
+        require_permission(connection, request, "manageOperators")
+        row = connection.execute(
+            """
+            SELECT
+                o.*,
+                i.department,
+                i.title,
+                i.status AS ad_status
+            FROM iam_operators o
+            LEFT JOIN identities i ON i.id = o.identity_id
+            WHERE o.identity_id = ?
+            """,
+            (identity_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Operador não encontrado.")
+
+        operator = dict(row)
+        permissions = sanitize_permissions(payload.permissions)
+        status = payload.status if payload.status in {"active", "pending", "disabled"} else operator["status"]
+
+        if is_bootstrap_admin(operator.get("username")):
+            permissions = ALL_PERMISSIONS.copy()
+            status = "active"
+
+        connection.execute(
+            """
+            UPDATE iam_operators
+            SET permissions_json = ?,
+                status = ?
+            WHERE identity_id = ?
+            """,
+            (json.dumps(permissions), status, identity_id),
+        )
+        connection.commit()
+
+        updated = connection.execute(
+            """
+            SELECT
+                o.*,
+                i.department,
+                i.title,
+                i.status AS ad_status
+            FROM iam_operators o
+            LEFT JOIN identities i ON i.id = o.identity_id
+            WHERE o.identity_id = ?
+            """,
+            (identity_id,),
+        ).fetchone()
+        return dict(updated)
 
 
 @app.get("/api/critical-permissions")
