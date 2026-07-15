@@ -70,6 +70,17 @@ button {
   font-weight: 800;
 }
 
+.brand-logo {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: #ffffff;
+  object-fit: contain;
+  padding: 4px;
+}
+
 .casa-terra-mark {
   position: relative;
   overflow: hidden;
@@ -1449,6 +1460,11 @@ td {
   .brand-mark {
     width: 36px;
     height: 36px;
+  }
+
+  .brand-logo {
+    width: 38px;
+    height: 38px;
   }
 
   .nav-list {
