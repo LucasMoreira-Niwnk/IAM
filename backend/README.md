@@ -22,10 +22,12 @@ mkdir -p data
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-## Primeiro sync
+## Primeiro sync sem login
 
 ```bash
-curl -X POST http://localhost:8000/api/sync/ad
+cd backend
+source .venv/bin/activate
+python -m app.cli sync-ad
 ```
 
 ## Endpoints iniciais
