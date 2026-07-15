@@ -9,3 +9,9 @@ function showToast(message) {
 document.querySelector("[data-login-action='ldap']").addEventListener("click", () => {
   showToast("Autenticação LDAP será conectada na etapa de backend.");
 });
+
+const logoutReason = sessionStorage.getItem("IAM_LOGOUT_REASON");
+if (logoutReason) {
+  showToast(logoutReason);
+  sessionStorage.removeItem("IAM_LOGOUT_REASON");
+}

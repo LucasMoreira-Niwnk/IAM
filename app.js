@@ -1,4 +1,7 @@
 const API_BASE_URL = window.IAM_API_BASE_URL || localStorage.getItem("IAM_API_BASE_URL") || "";
+const SESSION_TIMEOUT_MS =
+  Number(window.IAM_SESSION_TIMEOUT_MS || localStorage.getItem("IAM_SESSION_TIMEOUT_MS")) || 30 * 60 * 1000;
+let sessionTimeoutId = null;
 
 const state = {
   identities: [],
@@ -103,6 +106,34 @@ async function apiGetOptional(path) {
   } catch {
     return null;
   }
+}
+
+async function logout(reason = "manual") {
+  try {
+    await apiPost("/api/auth/logout");
+  } catch {
+    // O backend atual ainda pode não ter autenticação. Mesmo assim, limpamos o estado local.
+  }
+
+  if (reason === "timeout") {
+    sessionStorage.setItem("IAM_LOGOUT_REASON", "Sua sessão expirou por inatividade.");
+  }
+
+  window.location.href = "login.html";
+}
+
+function resetSessionTimer() {
+  window.clearTimeout(sessionTimeoutId);
+  sessionTimeoutId = window.setTimeout(() => {
+    logout("timeout");
+  }, SESSION_TIMEOUT_MS);
+}
+
+function startSessionTimer() {
+  ["click", "keydown", "mousemove", "scroll", "touchstart"].forEach((eventName) => {
+    document.addEventListener(eventName, resetSessionTimer, { passive: true });
+  });
+  resetSessionTimer();
 }
 
 function showToast(message) {
@@ -931,19 +962,13 @@ function bindEvents() {
   });
 
   document.querySelector("#logout-button").addEventListener("click", async () => {
-    try {
-      await apiPost("/api/auth/logout");
-    } catch {
-      // O backend atual ainda pode não ter autenticação. Mesmo assim, limpamos o estado local.
-    }
-
-    localStorage.removeItem("IAM_API_BASE_URL");
-    window.location.href = "login.html";
+    await logout("manual");
   });
 }
 
 function init() {
   bindEvents();
+  startSessionTimer();
   loadData();
 }
 
