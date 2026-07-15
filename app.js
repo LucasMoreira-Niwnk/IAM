@@ -10,6 +10,8 @@ const state = {
   selectedIdentityGroups: [],
   selectedOperatorId: null,
   activeFilter: "all",
+  identityPage: 1,
+  identityPageSize: 10,
   loading: true,
   apiOnline: false,
 };
@@ -255,10 +257,16 @@ function renderIdentities() {
     document.querySelector("#identity-table").innerHTML = `
       <tr><td colspan="7">Nenhuma identidade encontrada. Execute a sincronização com o AD.</td></tr>
     `;
+    document.querySelector("#identity-pagination").innerHTML = "";
     return;
   }
 
-  document.querySelector("#identity-table").innerHTML = users
+  const totalPages = Math.max(1, Math.ceil(users.length / state.identityPageSize));
+  state.identityPage = Math.min(Math.max(1, state.identityPage), totalPages);
+  const start = (state.identityPage - 1) * state.identityPageSize;
+  const visibleUsers = users.slice(start, start + state.identityPageSize);
+
+  document.querySelector("#identity-table").innerHTML = visibleUsers
     .map(
       (identity) => `
         <tr class="clickable-row" data-identity-id="${identity.id}">
@@ -281,6 +289,17 @@ function renderIdentities() {
       `,
     )
     .join("");
+
+  const firstItem = start + 1;
+  const lastItem = Math.min(start + state.identityPageSize, users.length);
+  document.querySelector("#identity-pagination").innerHTML = `
+    <span>Mostrando ${firstItem}-${lastItem} de ${users.length}</span>
+    <div class="pagination-actions">
+      <button class="ghost-button" type="button" data-page-action="prev" ${state.identityPage === 1 ? "disabled" : ""}>Anterior</button>
+      <strong>Página ${state.identityPage} de ${totalPages}</strong>
+      <button class="ghost-button" type="button" data-page-action="next" ${state.identityPage === totalPages ? "disabled" : ""}>Próxima</button>
+    </div>
+  `;
 }
 
 async function renderIdentityDetail(identityId) {
@@ -607,13 +626,30 @@ function bindEvents() {
   document.querySelectorAll(".chip").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeFilter = button.dataset.filter;
+      state.identityPage = 1;
       document.querySelectorAll(".chip").forEach((chip) => chip.classList.remove("is-active"));
       button.classList.add("is-active");
       renderIdentities();
     });
   });
 
-  document.querySelector("#global-search").addEventListener("input", renderIdentities);
+  document.querySelector("#global-search").addEventListener("input", () => {
+    state.identityPage = 1;
+    renderIdentities();
+  });
+
+  document.querySelector("#identity-pagination").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-page-action]");
+    if (!button) return;
+
+    if (button.dataset.pageAction === "prev") {
+      state.identityPage -= 1;
+    }
+    if (button.dataset.pageAction === "next") {
+      state.identityPage += 1;
+    }
+    renderIdentities();
+  });
 
   document.querySelector("#identity-table").addEventListener("click", (event) => {
     const openButton = event.target.closest("[data-open-identity]");
