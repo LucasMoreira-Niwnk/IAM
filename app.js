@@ -239,7 +239,7 @@ function renderDirectoryIndicators() {
 }
 
 function renderIdentities() {
-  const searchTerm = document.querySelector("#global-search").value.trim().toLowerCase();
+  const searchTerm = globalSearchTerm();
   const users = state.identities.filter((identity) => {
     const matchesFilter = state.activeFilter === "all" || identity.status === state.activeFilter;
     const searchable = [
@@ -302,6 +302,28 @@ function renderIdentities() {
       <button class="ghost-button" type="button" data-page-action="next" ${state.identityPage === totalPages ? "disabled" : ""}>Próxima</button>
     </div>
   `;
+}
+
+function globalSearchTerm() {
+  return document.querySelector("#global-search").value.trim().toLowerCase();
+}
+
+function groupMatchesSearch(group, searchTerm) {
+  if (!searchTerm) return true;
+  return [group.name, group.description, group.distinguished_name]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(searchTerm);
+}
+
+function identityMatchesSearch(identity, searchTerm) {
+  if (!searchTerm) return true;
+  return [identityName(identity), identityEmail(identity), identity.username, identity.department, identity.distinguished_name]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(searchTerm);
 }
 
 async function renderIdentityDetail(identityId) {
@@ -400,16 +422,22 @@ async function renderIdentityDetail(identityId) {
 }
 
 function renderAccess() {
-  if (!state.groups.length) {
-    renderEmpty("#access-grid", "Nenhum grupo sincronizado ainda.");
+  const searchTerm = globalSearchTerm();
+  const groups = state.groups.filter((group) => groupMatchesSearch(group, searchTerm));
+
+  if (!groups.length) {
+    renderEmpty(
+      "#access-grid",
+      searchTerm ? "Nenhum grupo encontrado para a busca atual." : "Nenhum grupo sincronizado ainda.",
+    );
     document.querySelector("#group-pagination").innerHTML = "";
     return;
   }
 
-  const totalPages = Math.max(1, Math.ceil(state.groups.length / state.groupPageSize));
+  const totalPages = Math.max(1, Math.ceil(groups.length / state.groupPageSize));
   state.groupPage = Math.min(Math.max(1, state.groupPage), totalPages);
   const start = (state.groupPage - 1) * state.groupPageSize;
-  const visibleGroups = state.groups.slice(start, start + state.groupPageSize);
+  const visibleGroups = groups.slice(start, start + state.groupPageSize);
 
   document.querySelector("#access-grid").innerHTML = visibleGroups
     .map(
@@ -430,15 +458,79 @@ function renderAccess() {
     .join("");
 
   const firstItem = start + 1;
-  const lastItem = Math.min(start + state.groupPageSize, state.groups.length);
+  const lastItem = Math.min(start + state.groupPageSize, groups.length);
   document.querySelector("#group-pagination").innerHTML = `
-    <span>Mostrando ${firstItem}-${lastItem} de ${state.groups.length}</span>
+    <span>Mostrando ${firstItem}-${lastItem} de ${groups.length}</span>
     <div class="pagination-actions">
       <button class="ghost-button" type="button" data-group-page-action="prev" ${state.groupPage === 1 ? "disabled" : ""}>Anterior</button>
       <strong>Página ${state.groupPage} de ${totalPages}</strong>
       <button class="ghost-button" type="button" data-group-page-action="next" ${state.groupPage === totalPages ? "disabled" : ""}>Próxima</button>
     </div>
   `;
+}
+
+function renderGlobalSearchResults() {
+  const panel = document.querySelector("#global-search-results");
+  const searchTerm = globalSearchTerm();
+
+  if (!searchTerm) {
+    panel.classList.remove("is-visible");
+    panel.innerHTML = "";
+    return;
+  }
+
+  const matchedUsers = state.identities.filter((identity) => identityMatchesSearch(identity, searchTerm)).slice(0, 6);
+  const matchedGroups = state.groups.filter((group) => groupMatchesSearch(group, searchTerm)).slice(0, 6);
+
+  if (!matchedUsers.length && !matchedGroups.length) {
+    panel.innerHTML = `<div class="search-empty">Nenhum usuário ou grupo encontrado.</div>`;
+    panel.classList.add("is-visible");
+    return;
+  }
+
+  panel.innerHTML = `
+    ${
+      matchedUsers.length
+        ? `<section>
+            <strong>Usuários</strong>
+            ${matchedUsers
+              .map(
+                (identity) => `
+                  <button type="button" data-search-identity="${identity.id}">
+                    <span class="avatar">${initials(identityName(identity))}</span>
+                    <span>
+                      <b>${identityName(identity)}</b>
+                      <small>${identityEmail(identity) || identity.username || ""}</small>
+                    </span>
+                  </button>
+                `,
+              )
+              .join("")}
+          </section>`
+        : ""
+    }
+    ${
+      matchedGroups.length
+        ? `<section>
+            <strong>Grupos</strong>
+            ${matchedGroups
+              .map(
+                (group) => `
+                  <button type="button" data-search-group="${encodeURIComponent(group.name)}">
+                    <span class="avatar">G</span>
+                    <span>
+                      <b>${group.name}</b>
+                      <small>${group.member_count || 0} membros</small>
+                    </span>
+                  </button>
+                `,
+              )
+              .join("")}
+          </section>`
+        : ""
+    }
+  `;
+  panel.classList.add("is-visible");
 }
 
 function renderCriticalPermissions() {
@@ -580,6 +672,7 @@ function renderAll() {
   renderDirectoryIndicators();
   renderIdentities();
   renderAccess();
+  renderGlobalSearchResults();
   renderCriticalPermissions();
   renderOperators();
   renderAudit();
@@ -654,7 +747,37 @@ function bindEvents() {
 
   document.querySelector("#global-search").addEventListener("input", () => {
     state.identityPage = 1;
+    state.groupPage = 1;
     renderIdentities();
+    renderAccess();
+    renderGlobalSearchResults();
+  });
+
+  document.querySelector("#global-search").addEventListener("focus", renderGlobalSearchResults);
+
+  document.querySelector("#global-search-results").addEventListener("click", (event) => {
+    const identityButton = event.target.closest("[data-search-identity]");
+    const groupButton = event.target.closest("[data-search-group]");
+
+    if (identityButton) {
+      document.querySelector("#global-search-results").classList.remove("is-visible");
+      openIdentityDetail(identityButton.dataset.searchIdentity);
+      return;
+    }
+
+    if (groupButton) {
+      document.querySelector("#global-search").value = decodeURIComponent(groupButton.dataset.searchGroup);
+      state.groupPage = 1;
+      renderAccess();
+      document.querySelector("#global-search-results").classList.remove("is-visible");
+      switchView("access");
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".topbar-actions")) {
+      document.querySelector("#global-search-results").classList.remove("is-visible");
+    }
   });
 
   document.querySelector("#identity-pagination").addEventListener("click", (event) => {
