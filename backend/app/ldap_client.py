@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from ldap3 import ALL, Connection, Server, SUBTREE
+from ldap3 import ALL, MODIFY_ADD, MODIFY_DELETE, MODIFY_REPLACE, Connection, Server, SUBTREE
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 from ldap3.utils.dn import escape_rdn
@@ -43,6 +43,8 @@ GROUP_SCOPE_TYPES = {
     "universal": 0x00000008,
 }
 SECURITY_ENABLED = 0x80000000
+ACCOUNT_DISABLED_FLAG = 0x0002
+NORMAL_ACCOUNT_FLAG = 0x0200
 
 
 def normalize_dn(dn: str) -> str:
@@ -149,12 +151,7 @@ class ReadOnlyLdapClient:
         ou_dn = target_ou.strip()
         if not group_name:
             raise ValueError("Nome do grupo obrigatorio.")
-        if not ou_dn.upper().startswith("OU="):
-            raise ValueError("OU de destino invalida.")
-        if not normalize_dn(ou_dn).endswith(normalize_dn(self.settings.ldap_base_dn)):
-            raise ValueError(
-                f"OU de destino fora da base LDAP configurada. Base esperada: {self.settings.ldap_base_dn}"
-            )
+        self._validate_target_ou(ou_dn)
 
         group_dn = f"CN={escape_rdn(group_name)},{ou_dn}"
         group_type_value = self._group_type_value(scope, group_type)
@@ -173,13 +170,7 @@ class ReadOnlyLdapClient:
                 attributes=attributes,
             )
             if not created:
-                result_code = connection.result.get("result")
-                description_result = connection.result.get("description")
-                if result_code == 68 or description_result == "entryAlreadyExists":
-                    raise ValueError("Já existe um grupo com esse nome na OU selecionada.")
-
-                message = connection.result.get("message") or description_result or "Falha LDAP ao criar grupo."
-                raise RuntimeError(str(message))
+                self._raise_ldap_write_error(connection, "Falha LDAP ao criar grupo.")
 
         return {
             "name": group_name,
@@ -188,6 +179,136 @@ class ReadOnlyLdapClient:
             "scope": scope,
             "type": group_type,
         }
+
+    def _validate_target_ou(self, ou_dn: str) -> None:
+        if not ou_dn.upper().startswith("OU="):
+            raise ValueError("OU de destino invalida.")
+        if not normalize_dn(ou_dn).endswith(normalize_dn(self.settings.ldap_base_dn)):
+            raise ValueError(
+                f"OU de destino fora da base LDAP configurada. Base esperada: {self.settings.ldap_base_dn}"
+            )
+
+    @staticmethod
+    def _raise_ldap_write_error(connection: Connection, fallback: str) -> None:
+        result_code = connection.result.get("result")
+        description_result = connection.result.get("description")
+        if result_code == 68 or description_result == "entryAlreadyExists":
+            raise ValueError("Ja existe um objeto com esse nome na OU selecionada.")
+        message = connection.result.get("message") or description_result or fallback
+        raise RuntimeError(str(message))
+
+    def create_user(
+        self,
+        username: str,
+        first_name: str,
+        last_name: str,
+        email: str,
+        target_ou: str,
+        password: str,
+        must_change_password: bool,
+        title: str | None = None,
+        department: str | None = None,
+    ) -> dict[str, str]:
+        username = username.strip()
+        first_name = first_name.strip()
+        last_name = last_name.strip()
+        email = email.strip()
+        ou_dn = target_ou.strip()
+        display_name = " ".join(part for part in [first_name, last_name] if part).strip() or username
+
+        if not username or not first_name or not last_name:
+            raise ValueError("Nome, sobrenome e usuario sao obrigatorios.")
+        if not password:
+            raise ValueError("Senha inicial obrigatoria.")
+        self._validate_target_ou(ou_dn)
+
+        user_dn = f"CN={escape_rdn(display_name)},{ou_dn}"
+        attributes = {
+            "cn": display_name,
+            "givenName": first_name,
+            "sn": last_name,
+            "displayName": display_name,
+            "sAMAccountName": username,
+            "userPrincipalName": email or username,
+            "userAccountControl": NORMAL_ACCOUNT_FLAG | ACCOUNT_DISABLED_FLAG,
+        }
+        if email:
+            attributes["mail"] = email
+        if title:
+            attributes["title"] = title.strip()
+        if department:
+            attributes["department"] = department.strip()
+
+        with self._connection() as connection:
+            if not connection.add(
+                dn=user_dn,
+                object_class=["top", "person", "organizationalPerson", "user"],
+                attributes=attributes,
+            ):
+                self._raise_ldap_write_error(connection, "Falha LDAP ao criar usuario.")
+
+            self._replace_password(connection, user_dn, password)
+            changes = {"userAccountControl": [(MODIFY_REPLACE, [NORMAL_ACCOUNT_FLAG])]}
+            if must_change_password:
+                changes["pwdLastSet"] = [(MODIFY_REPLACE, [0])]
+            if not connection.modify(user_dn, changes):
+                self._raise_ldap_write_error(connection, "Usuario criado, mas falha ao habilitar conta.")
+
+        return {
+            "username": username,
+            "display_name": display_name,
+            "email": email,
+            "upn": email or username,
+            "title": title or "",
+            "department": department or "",
+            "distinguished_name": user_dn,
+        }
+
+    def reset_password(self, user_dn: str, new_password: str, must_change_password: bool) -> None:
+        if not new_password:
+            raise ValueError("Nova senha obrigatoria.")
+        with self._connection() as connection:
+            self._replace_password(connection, user_dn, new_password)
+            pwd_last_set = 0 if must_change_password else -1
+            if not connection.modify(user_dn, {"pwdLastSet": [(MODIFY_REPLACE, [pwd_last_set])]}):
+                self._raise_ldap_write_error(connection, "Senha alterada, mas falha ao atualizar pwdLastSet.")
+
+    def unlock_user(self, user_dn: str) -> None:
+        with self._connection() as connection:
+            if not connection.modify(user_dn, {"lockoutTime": [(MODIFY_REPLACE, [0])]}):
+                self._raise_ldap_write_error(connection, "Falha LDAP ao desbloquear usuario.")
+
+    def set_user_enabled(self, user_dn: str, current_uac: int, enabled: bool) -> int:
+        new_uac = int(current_uac or NORMAL_ACCOUNT_FLAG)
+        if enabled:
+            new_uac &= ~ACCOUNT_DISABLED_FLAG
+        else:
+            new_uac |= ACCOUNT_DISABLED_FLAG
+        with self._connection() as connection:
+            if not connection.modify(user_dn, {"userAccountControl": [(MODIFY_REPLACE, [new_uac])]}):
+                self._raise_ldap_write_error(connection, "Falha LDAP ao alterar status do usuario.")
+        return new_uac
+
+    def add_user_to_group(self, user_dn: str, group_dn: str) -> None:
+        with self._connection() as connection:
+            if not connection.modify(group_dn, {"member": [(MODIFY_ADD, [user_dn])]}):
+                self._raise_ldap_write_error(connection, "Falha LDAP ao adicionar usuario ao grupo.")
+
+    def remove_user_from_group(self, user_dn: str, group_dn: str) -> None:
+        with self._connection() as connection:
+            if not connection.modify(group_dn, {"member": [(MODIFY_DELETE, [user_dn])]}):
+                self._raise_ldap_write_error(connection, "Falha LDAP ao remover usuario do grupo.")
+
+    @staticmethod
+    def _encoded_ad_password(password: str) -> bytes:
+        return f'"{password}"'.encode("utf-16-le")
+
+    def _replace_password(self, connection: Connection, user_dn: str, password: str) -> None:
+        if not connection.modify(
+            user_dn,
+            {"unicodePwd": [(MODIFY_REPLACE, [self._encoded_ad_password(password)])]},
+        ):
+            self._raise_ldap_write_error(connection, "Falha LDAP ao definir senha.")
 
     @staticmethod
     def _group_type_value(scope: str, group_type: str) -> int:

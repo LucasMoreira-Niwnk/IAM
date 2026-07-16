@@ -65,6 +65,33 @@ class CreateGroupRequest(BaseModel):
     is_critical: bool = False
 
 
+class CreateUserRequest(BaseModel):
+    first_name: str
+    last_name: str
+    username: str
+    email: str = ""
+    title: str = ""
+    department: str = ""
+    target_ou: str
+    password: str
+    must_change_password: bool = True
+
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+    must_change_password: bool = True
+
+
+class GroupMembershipRequest(BaseModel):
+    group_dn: str
+    group_name: str | None = None
+    is_critical: bool = False
+
+
+class IdentityStatusRequest(BaseModel):
+    action: str
+
+
 def db():
     connection = connect(settings.database_path)
     init_db(connection)
@@ -303,6 +330,24 @@ def log_audit_event(
     )
 
 
+def get_identity_or_404(connection, identity_id: str) -> dict:
+    row = connection.execute(
+        """
+        SELECT *
+        FROM identities
+        WHERE id = ?
+        """,
+        (identity_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Identidade não encontrada.")
+    return dict(row)
+
+
+def cn_from_group_dn(group_dn: str) -> str:
+    return cn_from_dn(group_dn)
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {
@@ -408,6 +453,237 @@ def identity_groups(identity_id: str) -> list[dict]:
             (identity_id,),
         ).fetchall()
         return rows_to_dicts(rows)
+
+
+@app.post("/api/identities")
+def create_identity(payload: CreateUserRequest, request: Request) -> dict:
+    with db() as connection:
+        operator = require_permission(connection, request, "manageOperators")
+        try:
+            created = ReadOnlyLdapClient(settings).create_user(
+                username=payload.username,
+                first_name=payload.first_name,
+                last_name=payload.last_name,
+                email=payload.email,
+                target_ou=payload.target_ou,
+                password=payload.password,
+                must_change_password=payload.must_change_password,
+                title=payload.title,
+                department=payload.department,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        synced_at = now_iso()
+        identity_id = created["distinguished_name"]
+        connection.execute(
+            """
+            INSERT INTO identities (
+                id, username, display_name, email, upn, title, department, manager_dn,
+                phone, location, distinguished_name, status, user_account_control,
+                pwd_last_set, last_logon_timestamp, synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                identity_id,
+                created["username"],
+                created["display_name"],
+                created["email"],
+                created["upn"],
+                created["title"],
+                created["department"],
+                None,
+                None,
+                None,
+                created["distinguished_name"],
+                "active",
+                512,
+                "0" if payload.must_change_password else "",
+                "",
+                synced_at,
+            ),
+        )
+        log_audit_event(
+            connection,
+            operator,
+            action="create_user",
+            target_type="identity",
+            target_name=created["display_name"],
+            target_dn=created["distinguished_name"],
+            status="success",
+            details={"username": created["username"], "must_change_password": payload.must_change_password},
+        )
+        connection.commit()
+        return {"ok": True, "identity": get_identity_or_404(connection, identity_id)}
+
+
+@app.post("/api/identities/{identity_id}/password")
+def reset_identity_password(identity_id: str, payload: ResetPasswordRequest, request: Request) -> dict:
+    with db() as connection:
+        operator = require_permission(connection, request, "resetPassword")
+        identity = get_identity_or_404(connection, identity_id)
+        try:
+            ReadOnlyLdapClient(settings).reset_password(
+                identity["distinguished_name"],
+                payload.new_password,
+                payload.must_change_password,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        connection.execute(
+            """
+            UPDATE identities
+            SET pwd_last_set = ?,
+                synced_at = ?
+            WHERE id = ?
+            """,
+            ("0" if payload.must_change_password else now_iso(), now_iso(), identity_id),
+        )
+        log_audit_event(
+            connection,
+            operator,
+            action="reset_password",
+            target_type="identity",
+            target_name=identity.get("display_name") or identity.get("username"),
+            target_dn=identity["distinguished_name"],
+            status="success",
+            details={"must_change_password": payload.must_change_password},
+        )
+        connection.commit()
+        return {"ok": True}
+
+
+@app.post("/api/identities/{identity_id}/status")
+def update_identity_status(identity_id: str, payload: IdentityStatusRequest, request: Request) -> dict:
+    with db() as connection:
+        operator = require_permission(connection, request, "lockUnlock")
+        identity = get_identity_or_404(connection, identity_id)
+        action = payload.action
+        client = ReadOnlyLdapClient(settings)
+
+        try:
+            if action == "unlock":
+                client.unlock_user(identity["distinguished_name"])
+                new_status = "active"
+                new_uac = identity.get("user_account_control") or 512
+            elif action in {"disable", "block"}:
+                new_uac = client.set_user_enabled(
+                    identity["distinguished_name"],
+                    identity.get("user_account_control") or 512,
+                    enabled=False,
+                )
+                new_status = "disabled" if action == "disable" else "blocked"
+            elif action == "enable":
+                new_uac = client.set_user_enabled(
+                    identity["distinguished_name"],
+                    identity.get("user_account_control") or 512,
+                    enabled=True,
+                )
+                new_status = "active"
+            else:
+                raise ValueError("Ação de status inválida.")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        connection.execute(
+            """
+            UPDATE identities
+            SET status = ?,
+                user_account_control = ?,
+                synced_at = ?
+            WHERE id = ?
+            """,
+            (new_status, int(new_uac), now_iso(), identity_id),
+        )
+        log_audit_event(
+            connection,
+            operator,
+            action=f"{action}_identity",
+            target_type="identity",
+            target_name=identity.get("display_name") or identity.get("username"),
+            target_dn=identity["distinguished_name"],
+            status="success",
+            details={"new_status": new_status},
+        )
+        connection.commit()
+        return {"ok": True, "identity": get_identity_or_404(connection, identity_id)}
+
+
+@app.post("/api/identities/{identity_id}/groups/add")
+def add_identity_group(identity_id: str, payload: GroupMembershipRequest, request: Request) -> dict:
+    with db() as connection:
+        operator = require_permission(connection, request, "manageGroups")
+        identity = get_identity_or_404(connection, identity_id)
+        group_name = payload.group_name or cn_from_group_dn(payload.group_dn)
+        try:
+            ReadOnlyLdapClient(settings).add_user_to_group(identity["distinguished_name"], payload.group_dn)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        connection.execute(
+            """
+            INSERT OR REPLACE INTO identity_groups (
+                identity_id, group_dn, group_name, is_critical, synced_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (identity_id, payload.group_dn, group_name, 1 if payload.is_critical else 0, now_iso()),
+        )
+        log_audit_event(
+            connection,
+            operator,
+            action="add_group_member",
+            target_type="identity",
+            target_name=identity.get("display_name") or identity.get("username"),
+            target_dn=identity["distinguished_name"],
+            status="success",
+            details={"group": group_name, "group_dn": payload.group_dn},
+        )
+        connection.commit()
+        return {"ok": True}
+
+
+@app.post("/api/identities/{identity_id}/groups/remove")
+def remove_identity_group(identity_id: str, payload: GroupMembershipRequest, request: Request) -> dict:
+    with db() as connection:
+        operator = require_permission(connection, request, "manageGroups")
+        identity = get_identity_or_404(connection, identity_id)
+        group_name = payload.group_name or cn_from_group_dn(payload.group_dn)
+        try:
+            ReadOnlyLdapClient(settings).remove_user_from_group(identity["distinguished_name"], payload.group_dn)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        connection.execute(
+            """
+            DELETE FROM identity_groups
+            WHERE identity_id = ?
+              AND lower(group_dn) = lower(?)
+            """,
+            (identity_id, payload.group_dn),
+        )
+        log_audit_event(
+            connection,
+            operator,
+            action="remove_group_member",
+            target_type="identity",
+            target_name=identity.get("display_name") or identity.get("username"),
+            target_dn=identity["distinguished_name"],
+            status="success",
+            details={"group": group_name, "group_dn": payload.group_dn},
+        )
+        connection.commit()
+        return {"ok": True}
 
 
 @app.get("/api/groups")

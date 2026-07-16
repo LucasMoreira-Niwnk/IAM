@@ -230,6 +230,14 @@ function permissionSourceLabel(source) {
 function auditActionLabel(action) {
   const labels = {
     create_group: "Criação de grupo",
+    create_user: "Criação de usuário",
+    reset_password: "Alteração de senha",
+    unlock_identity: "Desbloqueio de identidade",
+    block_identity: "Bloqueio de identidade",
+    disable_identity: "Desabilitação de identidade",
+    enable_identity: "Habilitação de identidade",
+    add_group_member: "Adição em grupo",
+    remove_group_member: "Remoção de grupo",
     update_operator_permissions: "Alteração de permissões",
     sync_ad: "Sincronização AD",
   };
@@ -918,6 +926,9 @@ function closeModals() {
 function openPasswordModal() {
   const identity = selectedIdentity();
   if (!identity) return;
+  document.querySelector("#password-new").value = "";
+  document.querySelector("#password-confirm").value = "";
+  document.querySelector("#password-must-change").checked = true;
   document.querySelector("#password-modal-identity").innerHTML = modalIdentityMarkup(identity);
   openModal("#password-modal");
 }
@@ -956,7 +967,7 @@ function renderGroupEditor(searchTerm = "") {
                 <strong>${group.group_name}</strong>
                 <span>${group.is_critical ? "Crítico" : "Padrão"}</span>
               </div>
-              <button class="text-button danger-text" type="button" data-readonly-submit="remove-group">Remover</button>
+              <button class="text-button danger-text" type="button" data-group-remove="${encodeURIComponent(group.group_dn)}" data-group-name="${encodeURIComponent(group.group_name)}">Remover</button>
             </article>
           `,
         )
@@ -972,7 +983,7 @@ function renderGroupEditor(searchTerm = "") {
                 <strong>${group.name}</strong>
                 <span>${group.description || "Sem descrição"}</span>
               </div>
-              <button class="text-button" type="button" data-readonly-submit="add-group">Adicionar</button>
+              <button class="text-button" type="button" data-group-add="${encodeURIComponent(group.distinguished_name)}" data-group-name="${encodeURIComponent(group.name)}" data-group-critical="${group.is_critical ? "1" : "0"}">Adicionar</button>
             </article>
           `,
         )
@@ -1058,6 +1069,19 @@ function renderGroupOuList(searchTerm = "") {
 function openCreateUserModal() {
   const searchInput = document.querySelector("#user-ou-search");
   searchInput.value = "";
+  [
+    "#create-user-first-name",
+    "#create-user-last-name",
+    "#create-user-username",
+    "#create-user-email",
+    "#create-user-title",
+    "#create-user-department",
+    "#create-user-password",
+    "#create-user-password-confirm",
+  ].forEach((selector) => {
+    document.querySelector(selector).value = "";
+  });
+  document.querySelector("#create-user-must-change").checked = true;
   renderUserOuList();
   openModal("#create-user-modal");
   window.setTimeout(() => document.querySelector("#create-user-modal input").focus(), 0);
@@ -1078,6 +1102,26 @@ function openCreateGroupModal() {
 
 function selectedGroupOu() {
   return document.querySelector("#group-ou-list input[type='radio']:checked")?.value || "";
+}
+
+function selectedUserOu() {
+  return document.querySelector("#user-ou-list input[type='radio']:checked")?.value || "";
+}
+
+async function refreshAudit() {
+  state.auditEvents = await apiGet("/api/audit-events");
+  renderAudit();
+}
+
+async function refreshSelectedIdentity() {
+  const identityId = state.selectedIdentityId;
+  const identities = await apiGet("/api/identities");
+  state.identities = identities;
+  if (identityId) {
+    await renderIdentityDetail(identityId);
+  }
+  renderIdentities();
+  renderMetrics();
 }
 
 async function submitCreateGroup() {
@@ -1112,6 +1156,117 @@ async function submitCreateGroup() {
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = "Criar grupo";
+  }
+}
+
+async function submitCreateUser() {
+  const submitButton = document.querySelector("#create-user-submit");
+  const password = document.querySelector("#create-user-password").value;
+  const confirmPassword = document.querySelector("#create-user-password-confirm").value;
+  const payload = {
+    first_name: document.querySelector("#create-user-first-name").value.trim(),
+    last_name: document.querySelector("#create-user-last-name").value.trim(),
+    username: document.querySelector("#create-user-username").value.trim(),
+    email: document.querySelector("#create-user-email").value.trim(),
+    title: document.querySelector("#create-user-title").value.trim(),
+    department: document.querySelector("#create-user-department").value.trim(),
+    target_ou: selectedUserOu(),
+    password,
+    must_change_password: document.querySelector("#create-user-must-change").checked,
+  };
+
+  if (!payload.first_name || !payload.last_name || !payload.username || !payload.password || !payload.target_ou) {
+    showToast("Informe nome, sobrenome, usuário, senha e OU de destino.");
+    return;
+  }
+  if (password !== confirmPassword) {
+    showToast("A confirmação da senha não confere.");
+    return;
+  }
+
+  submitButton.disabled = true;
+  submitButton.textContent = "Criando...";
+  try {
+    const result = await apiPost("/api/identities", payload);
+    state.identities = [result.identity, ...state.identities.filter((identity) => identity.id !== result.identity.id)];
+    state.identityPage = 1;
+    renderIdentities();
+    renderMetrics();
+    await refreshAudit();
+    closeModals();
+    showToast(`Usuário ${result.identity.username} criado no AD.`);
+  } catch (error) {
+    showToast(`Falha ao criar usuário: ${error.message}`);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Criar usuário";
+  }
+}
+
+async function submitPasswordReset() {
+  const identity = selectedIdentity();
+  const submitButton = document.querySelector("#password-submit");
+  const newPassword = document.querySelector("#password-new").value;
+  const confirmPassword = document.querySelector("#password-confirm").value;
+  if (!identity || !newPassword) {
+    showToast("Informe a nova senha.");
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast("A confirmação da senha não confere.");
+    return;
+  }
+
+  submitButton.disabled = true;
+  submitButton.textContent = "Alterando...";
+  try {
+    await apiPost(`/api/identities/${identity.id}/password`, {
+      new_password: newPassword,
+      must_change_password: document.querySelector("#password-must-change").checked,
+    });
+    await refreshSelectedIdentity();
+    await refreshAudit();
+    closeModals();
+    showToast("Senha alterada no AD.");
+  } catch (error) {
+    showToast(`Falha ao alterar senha: ${error.message}`);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Alterar senha";
+  }
+}
+
+async function updateIdentityStatus(action) {
+  const identity = selectedIdentity();
+  if (!identity) return;
+  try {
+    const result = await apiPost(`/api/identities/${identity.id}/status`, { action });
+    state.identities = state.identities.map((item) => (item.id === result.identity.id ? result.identity : item));
+    await renderIdentityDetail(result.identity.id);
+    renderIdentities();
+    renderMetrics();
+    await refreshAudit();
+    showToast("Status da identidade atualizado no AD.");
+  } catch (error) {
+    showToast(`Falha ao atualizar status: ${error.message}`);
+  }
+}
+
+async function changeIdentityGroup(action, groupDn, groupName, isCritical = false) {
+  const identity = selectedIdentity();
+  if (!identity) return;
+  try {
+    await apiPost(`/api/identities/${identity.id}/groups/${action}`, {
+      group_dn: groupDn,
+      group_name: groupName,
+      is_critical: isCritical,
+    });
+    await renderIdentityDetail(identity.id);
+    renderIdentities();
+    await refreshAudit();
+    showToast(action === "add" ? "Grupo adicionado no AD." : "Grupo removido no AD.");
+  } catch (error) {
+    showToast(`Falha ao alterar grupo: ${error.message}`);
   }
 }
 
@@ -1279,6 +1434,21 @@ function bindEvents() {
         return;
       }
 
+      if (button.dataset.identityAction === "unlock") {
+        updateIdentityStatus("unlock");
+        return;
+      }
+
+      if (button.dataset.identityAction === "block") {
+        updateIdentityStatus("block");
+        return;
+      }
+
+      if (button.dataset.identityAction === "disable") {
+        updateIdentityStatus(button.textContent.trim() === "Habilitar" ? "enable" : "disable");
+        return;
+      }
+
       readonlyNotice(button.textContent.trim());
     });
   });
@@ -1315,19 +1485,29 @@ function bindEvents() {
   });
 
   document.querySelector("#groups-modal").addEventListener("click", (event) => {
-    const actionButton = event.target.closest("[data-readonly-submit]");
-    if (actionButton) {
-      readonlyNotice(actionButton.textContent.trim());
+    const addButton = event.target.closest("[data-group-add]");
+    const removeButton = event.target.closest("[data-group-remove]");
+    if (addButton) {
+      changeIdentityGroup(
+        "add",
+        decodeURIComponent(addButton.dataset.groupAdd),
+        decodeURIComponent(addButton.dataset.groupName || ""),
+        addButton.dataset.groupCritical === "1",
+      );
+      return;
+    }
+    if (removeButton) {
+      changeIdentityGroup(
+        "remove",
+        decodeURIComponent(removeButton.dataset.groupRemove),
+        decodeURIComponent(removeButton.dataset.groupName || ""),
+      );
     }
   });
 
-  document.querySelectorAll("#password-modal [data-readonly-submit]").forEach((button) => {
-    button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
-  });
+  document.querySelector("#password-submit").addEventListener("click", submitPasswordReset);
 
-  document.querySelectorAll("#create-user-modal [data-readonly-submit]").forEach((button) => {
-    button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
-  });
+  document.querySelector("#create-user-submit").addEventListener("click", submitCreateUser);
 
   document.querySelector("#create-group-submit").addEventListener("click", submitCreateGroup);
 

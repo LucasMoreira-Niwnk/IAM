@@ -378,22 +378,22 @@
         <div class="form-grid">
           <label class="field">
             <span>Nova senha</span>
-            <input type="password" placeholder="Informe a nova senha" autocomplete="new-password" />
+            <input id="password-new" type="password" placeholder="Informe a nova senha" autocomplete="new-password" />
           </label>
           <label class="field">
             <span>Confirmar senha</span>
-            <input type="password" placeholder="Confirme a nova senha" autocomplete="new-password" />
+            <input id="password-confirm" type="password" placeholder="Confirme a nova senha" autocomplete="new-password" />
           </label>
         </div>
 
         <label class="check-row">
-          <input type="checkbox" checked />
+          <input id="password-must-change" type="checkbox" checked />
           <span>Usuário deve trocar a senha no próximo login</span>
         </label>
 
         <div class="modal-footer">
           <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
-          <button class="primary-button" type="button" data-readonly-submit="password">Preparar alteração</button>
+          <button class="primary-button" type="button" id="password-submit">Alterar senha</button>
         </div>
       </section>
     </div>
@@ -433,7 +433,7 @@
 
         <div class="modal-footer">
           <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
-          <button class="primary-button" type="button" data-readonly-submit="groups">Preparar alteração</button>
+          <button class="primary-button" type="button" data-modal-close>Concluir</button>
         </div>
       </section>
     </div>
@@ -456,41 +456,41 @@
             <div class="form-grid">
               <label class="field">
                 <span>Nome</span>
-                <input type="text" placeholder="Nome" autocomplete="given-name" />
+                <input id="create-user-first-name" type="text" placeholder="Nome" autocomplete="given-name" />
               </label>
               <label class="field">
                 <span>Sobrenome</span>
-                <input type="text" placeholder="Sobrenome" autocomplete="family-name" />
+                <input id="create-user-last-name" type="text" placeholder="Sobrenome" autocomplete="family-name" />
               </label>
               <label class="field">
                 <span>Usuário</span>
-                <input type="text" placeholder="usuario" autocomplete="username" />
+                <input id="create-user-username" type="text" placeholder="usuario" autocomplete="username" />
               </label>
               <label class="field">
                 <span>E-mail</span>
-                <input type="email" placeholder="usuario@casaterra.local" autocomplete="email" />
+                <input id="create-user-email" type="email" placeholder="usuario@casaterra.local" autocomplete="email" />
               </label>
               <label class="field">
                 <span>Cargo</span>
-                <input type="text" placeholder="Cargo do colaborador" />
+                <input id="create-user-title" type="text" placeholder="Cargo do colaborador" />
               </label>
               <label class="field">
                 <span>Departamento</span>
-                <input type="text" placeholder="Departamento" />
+                <input id="create-user-department" type="text" placeholder="Departamento" />
               </label>
             </div>
             <div class="form-grid">
               <label class="field">
                 <span>Senha inicial</span>
-                <input type="password" placeholder="Senha inicial" autocomplete="new-password" />
+                <input id="create-user-password" type="password" placeholder="Senha inicial" autocomplete="new-password" />
               </label>
               <label class="field">
                 <span>Confirmar senha</span>
-                <input type="password" placeholder="Confirme a senha inicial" autocomplete="new-password" />
+                <input id="create-user-password-confirm" type="password" placeholder="Confirme a senha inicial" autocomplete="new-password" />
               </label>
             </div>
             <label class="check-row">
-              <input type="checkbox" checked />
+              <input id="create-user-must-change" type="checkbox" checked />
               <span>Usuário deve trocar a senha no próximo login</span>
             </label>
           </section>
@@ -510,7 +510,7 @@
 
         <div class="modal-footer">
           <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
-          <button class="primary-button" type="button" data-readonly-submit="create-user">Preparar criação</button>
+          <button class="primary-button" type="button" id="create-user-submit">Criar usuário</button>
         </div>
       </section>
     </div>
