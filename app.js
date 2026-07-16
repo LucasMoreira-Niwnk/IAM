@@ -1799,19 +1799,19 @@ function renderCopyGroupsPreview() {
   if (!preview) return;
 
   if (!state.copyGroupsSourceIdentityId) {
-    preview.innerHTML = "Nenhum usuÃ¡rio base selecionado.";
+    preview.innerHTML = "Nenhum usuario base selecionado.";
     return;
   }
 
   if (!state.copyGroupsSourceGroups.length) {
-    preview.innerHTML = "O usuÃ¡rio base selecionado nÃ£o possui grupos retornados pelo Ãºltimo sync.";
+    preview.innerHTML = "O usuario base selecionado nao possui grupos retornados pelo ultimo sync.";
     return;
   }
 
   const visibleGroups = state.copyGroupsSourceGroups.slice(0, 8);
   const remaining = state.copyGroupsSourceGroups.length - visibleGroups.length;
   preview.innerHTML = `
-    <strong>${state.copyGroupsSourceGroups.length} grupo(s) serÃ£o copiados</strong>
+    <strong>${state.copyGroupsSourceGroups.length} grupo(s) serao copiados</strong>
     <div class="copy-group-tags">
       ${visibleGroups.map((group) => `<span>${escapeHtml(group.group_name)}</span>`).join("")}
       ${remaining > 0 ? `<span>+${remaining}</span>` : ""}
@@ -1845,7 +1845,7 @@ function renderCopyUserList(searchTerm = "") {
           `,
         )
         .join("")
-    : `<div class="empty-state">Nenhum usuÃ¡rio encontrado.</div>`;
+    : `<div class="empty-state">Nenhum usuario encontrado.</div>`;
 
   renderCopyGroupsPreview();
 }
@@ -2457,13 +2457,13 @@ function bindEvents() {
     state.copyGroupsSourceIdentityId = button.dataset.copyUserId;
     state.copyGroupsSourceGroups = [];
     renderCopyUserList(document.querySelector("#copy-groups-user-search").value);
-    document.querySelector("#copy-groups-preview").textContent = "Carregando grupos do usuÃ¡rio base...";
+    document.querySelector("#copy-groups-preview").textContent = "Carregando grupos do usuario base...";
 
     try {
       state.copyGroupsSourceGroups = await apiGet(`/api/identities/${encodeURIComponent(state.copyGroupsSourceIdentityId)}/groups`);
     } catch (error) {
       state.copyGroupsSourceGroups = [];
-      showToast(`Falha ao carregar grupos do usuÃ¡rio base: ${error.message}`);
+      showToast(`Falha ao carregar grupos do usuario base: ${error.message}`);
     }
     renderCopyUserList(document.querySelector("#copy-groups-user-search").value);
   });
