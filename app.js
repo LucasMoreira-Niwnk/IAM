@@ -1590,18 +1590,38 @@ function ouDisplayName(ouDn) {
     .join(" / ");
 }
 
-function ouFolderName(ouDn) {
-  const firstOu = String(ouDn)
+function ouNameParts(ouDn) {
+  return String(ouDn)
     .split(",")
     .map((part) => part.trim())
-    .find((part) => part.toUpperCase().startsWith("OU="));
-  return firstOu ? firstOu.replace(/^OU=/i, "") : ouDisplayName(ouDn);
+    .filter((part) => part.toUpperCase().startsWith("OU="))
+    .map((part) => part.replace(/^OU=/i, ""));
+}
+
+function ouFolderName(ouDn) {
+  return ouNameParts(ouDn)[0] || ouDisplayName(ouDn);
+}
+
+function ouParentName(ouDn) {
+  return ouNameParts(ouDn)[1] || "";
+}
+
+function isAllowedDestinationOu(ouDn) {
+  const blockedNames = new Set(["service account", "staging-gpo"]);
+  return !blockedNames.has(ouFolderName(ouDn).toLowerCase());
+}
+
+function ouListTitle(ouDn, duplicateNames) {
+  const folderName = ouFolderName(ouDn);
+  const parentName = ouParentName(ouDn);
+  return duplicateNames.has(folderName.toLowerCase()) && parentName ? `${folderName} (${parentName})` : folderName;
 }
 
 function uniqueOus(records) {
   const ous = records
     .map((record) => ouFromDistinguishedName(record.distinguished_name))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter(isAllowedDestinationOu);
   return [...new Set(ous)].sort((a, b) =>
     `${ouFolderName(a)} ${a}`.localeCompare(`${ouFolderName(b)} ${b}`, "pt-BR"),
   );
@@ -1612,6 +1632,12 @@ function renderOuList({ records, listSelector, countSelector, searchTerm = "", e
   const ous = uniqueOus(records).filter((ou) =>
     `${ouFolderName(ou)} ${ouDisplayName(ou)} ${ou}`.toLowerCase().includes(normalizedSearch),
   );
+  const folderCounts = ous.reduce((acc, ou) => {
+    const key = ouFolderName(ou).toLowerCase();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const duplicateNames = new Set(Object.entries(folderCounts).filter(([, count]) => count > 1).map(([name]) => name));
   document.querySelector(countSelector).textContent = `${ous.length} OU(s)`;
   document.querySelector(listSelector).innerHTML = ous.length
     ? ous
@@ -1621,7 +1647,7 @@ function renderOuList({ records, listSelector, countSelector, searchTerm = "", e
             <label class="ou-card">
               <input type="radio" name="${listSelector.replace("#", "")}" value="${ou}" ${index === 0 ? "checked" : ""} />
               <span>
-                <strong>${ouFolderName(ou)}</strong>
+                <strong>${ouListTitle(ou, duplicateNames)}</strong>
                 <small>${ou}</small>
               </span>
             </label>
