@@ -22,6 +22,7 @@ const state = {
   identityPageSize: 10,
   groupPage: 1,
   groupPageSize: 10,
+  dashboardRangeDays: 1,
   auditOperatorFilter: "",
   loading: true,
   apiOnline: false,
@@ -328,6 +329,27 @@ function formatSyncTime(value) {
   return date.toLocaleString("pt-BR");
 }
 
+function dateFromValue(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isWithinDashboardRange(value) {
+  const date = dateFromValue(value);
+  if (!date) return false;
+  const cutoff = Date.now() - state.dashboardRangeDays * 24 * 60 * 60 * 1000;
+  return date.getTime() >= cutoff;
+}
+
+function dashboardAuditEvents() {
+  return state.auditEvents.filter((event) => isWithinDashboardRange(event.occurred_at));
+}
+
+function dashboardSyncRuns() {
+  return state.syncRuns.filter((run) => isWithinDashboardRange(run.finished_at || run.started_at));
+}
+
 function latestSyncRun() {
   return state.syncRuns[0] || null;
 }
@@ -375,10 +397,10 @@ function renderCurrentUser() {
 
 function renderReviews() {
   const reviewList = document.querySelector("#review-list");
-  const latestChanges = state.auditEvents.filter(isAdChangeEvent).slice(0, 6);
+  const latestChanges = dashboardAuditEvents().filter(isAdChangeEvent).slice(0, 6);
 
   if (!latestChanges.length) {
-    renderEmpty("#review-list", "Nenhuma alteração registrada ainda.");
+    renderEmpty("#review-list", "Nenhuma alteração registrada no período selecionado.");
     return;
   }
 
@@ -443,7 +465,7 @@ function renderDirectoryIndicators() {
         .join("")
     : `<div class="empty-state">Nenhum usuário em grupo crítico no cache atual.</div>`;
 
-  const operatorStats = state.auditEvents.filter(isAdChangeEvent).reduce((acc, event) => {
+  const operatorStats = dashboardAuditEvents().filter(isAdChangeEvent).reduce((acc, event) => {
     const key = event.operator_username || event.operator_display_name || "Sistema";
     if (!acc[key]) {
       acc[key] = {
@@ -476,8 +498,8 @@ function renderDirectoryIndicators() {
 }
 
 function dashboardNotifications() {
-  const failedSyncs = state.syncRuns.filter((run) => run.status && run.status !== "success").slice(0, 3);
-  const criticalAdds = state.auditEvents
+  const failedSyncs = dashboardSyncRuns().filter((run) => run.status && run.status !== "success").slice(0, 3);
+  const criticalAdds = dashboardAuditEvents()
     .filter((event) => event.action === "add_group_member" && eventTargetsCriticalGroup(event))
     .slice(0, 5);
 
@@ -1591,6 +1613,18 @@ function bindEvents() {
       document.querySelectorAll(".chip").forEach((chip) => chip.classList.remove("is-active"));
       button.classList.add("is-active");
       renderIdentities();
+    });
+  });
+
+  document.querySelectorAll("[data-dashboard-range]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.dashboardRangeDays = Number(button.dataset.dashboardRange || 1);
+      document.querySelectorAll("[data-dashboard-range]").forEach((rangeButton) => {
+        rangeButton.classList.toggle("is-selected", rangeButton === button);
+      });
+      renderReviews();
+      renderDirectoryIndicators();
+      renderNotifications();
     });
   });
 
