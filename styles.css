@@ -670,6 +670,43 @@ button:disabled {
 
 .governance-module {
   grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(24, 88, 132, 0.06), rgba(15, 118, 110, 0.04)),
+    #ffffff;
+}
+
+.governance-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.governance-summary-card {
+  min-height: 94px;
+  padding: 14px;
+  border: 1px solid #dce6f1;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.governance-summary-card span,
+.governance-summary-card small {
+  color: var(--muted);
+}
+
+.governance-summary-card span {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.governance-summary-card strong {
+  display: block;
+  margin: 8px 0 2px;
+  color: var(--ink);
+  font-size: 2rem;
+  line-height: 1;
 }
 
 .governance-item {
@@ -683,6 +720,18 @@ button:disabled {
 .governance-item:hover {
   border-color: var(--line);
   background: #f6f9ff;
+}
+
+.governance-item-full {
+  min-height: 76px;
+}
+
+.governance-modal-list {
+  max-height: 520px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding-right: 4px;
 }
 
 .governance-item strong,

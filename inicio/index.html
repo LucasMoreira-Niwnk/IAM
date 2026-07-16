@@ -145,9 +145,13 @@
 
               <section class="wide-module governance-module">
                 <div class="module-header">
-                  <h3>Governança Google Workspace</h3>
-                  <span id="workspace-disabled-count">0 alerta(s)</span>
+                  <div>
+                    <p class="eyebrow">Governança</p>
+                    <h3>Google Workspace</h3>
+                  </div>
+                  <button class="text-button" type="button" data-action="workspace-governance">Ver todos</button>
                 </div>
+                <div class="governance-summary" id="workspace-disabled-summary"></div>
                 <div class="governance-list" id="workspace-disabled-list"></div>
               </section>
             </div>
@@ -516,6 +520,28 @@
           <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
           <button class="primary-button" type="button" id="move-ou-submit">Mover usuário</button>
         </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="workspace-governance-modal" aria-hidden="true">
+      <section class="modal-card wide-modal" role="dialog" aria-modal="true" aria-labelledby="workspace-governance-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Governança</p>
+            <h2 id="workspace-governance-modal-title">Google Workspace</h2>
+          </div>
+          <button class="icon-button" type="button" data-modal-close aria-label="Fechar">X</button>
+        </div>
+
+        <div class="module-header compact-header">
+          <h3>Usuários desabilitados com licença</h3>
+          <span id="workspace-governance-total">0 alerta(s)</span>
+        </div>
+        <label class="search group-search">
+          <span aria-hidden="true">S</span>
+          <input id="workspace-governance-search" type="search" placeholder="Buscar usuário ou grupo" />
+        </label>
+        <div class="governance-modal-list" id="workspace-governance-list"></div>
       </section>
     </div>
 

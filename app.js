@@ -26,6 +26,7 @@ const state = {
   groupPageSize: 10,
   dashboardRangeDays: 1,
   auditOperatorFilter: "",
+  workspaceGovernanceSearch: "",
   loading: true,
   apiOnline: false,
   dismissedNotifications: loadDismissedNotifications(),
@@ -567,10 +568,23 @@ function renderDirectoryIndicators() {
 function renderWorkspaceGovernance() {
   const data = state.governance.workspace_disabled_members || { total: 0, users: [] };
   const users = data.users || [];
-  document.querySelector("#workspace-disabled-count").textContent = `${data.total || users.length} alerta(s)`;
+  const groupCounts = data.by_group || {};
+  const groups = data.groups?.length ? data.groups : ["GW-Business Standard", "GW-Enterprise Starter"];
+  document.querySelector("#workspace-disabled-summary").innerHTML = groups
+    .map(
+      (groupName) => `
+        <article class="governance-summary-card">
+          <span>${groupName}</span>
+          <strong>${groupCounts[groupName] || 0}</strong>
+          <small>usuário(s) desabilitado(s)</small>
+        </article>
+      `,
+    )
+    .join("");
+
   document.querySelector("#workspace-disabled-list").innerHTML = users.length
     ? users
-        .slice(0, 8)
+        .slice(0, 5)
         .map(
           (identity) => `
             <article class="governance-item" data-governance-identity="${identity.id}">
@@ -587,6 +601,52 @@ function renderWorkspaceGovernance() {
         )
         .join("")
     : `<div class="empty-state">Nenhum usuário desabilitado nos grupos GW-Business Standard ou GW-Enterprise Starter.</div>`;
+}
+
+function filteredWorkspaceGovernanceUsers() {
+  const data = state.governance.workspace_disabled_members || { users: [] };
+  const searchTerm = state.workspaceGovernanceSearch.trim().toLowerCase();
+  return (data.users || []).filter((identity) => {
+    if (!searchTerm) return true;
+    return [identityName(identity), identity.username, identity.email, identity.department, identity.group_name]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(searchTerm);
+  });
+}
+
+function renderWorkspaceGovernanceModal() {
+  const data = state.governance.workspace_disabled_members || { total: 0, users: [] };
+  const users = filteredWorkspaceGovernanceUsers();
+  document.querySelector("#workspace-governance-total").textContent = `${data.total || 0} alerta(s)`;
+  document.querySelector("#workspace-governance-list").innerHTML = users.length
+    ? users
+        .map(
+          (identity) => `
+            <article class="governance-item governance-item-full" data-governance-identity="${identity.id}">
+              <div>
+                <strong>${identityName(identity)}</strong>
+                <span>${identity.username || identity.email || "-"}</span>
+                <small>${identity.department || "Sem departamento informado"}</small>
+              </div>
+              <div>
+                <span class="badge disabled">Desabilitado</span>
+                <small>${identity.group_name}</small>
+              </div>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhum resultado encontrado para a busca atual.</div>`;
+}
+
+function openWorkspaceGovernanceModal() {
+  state.workspaceGovernanceSearch = "";
+  document.querySelector("#workspace-governance-search").value = "";
+  renderWorkspaceGovernanceModal();
+  openModal("#workspace-governance-modal");
+  window.setTimeout(() => document.querySelector("#workspace-governance-search").focus(), 0);
 }
 
 function dashboardNotifications() {
@@ -2161,6 +2221,14 @@ function bindEvents() {
     if (governanceUser?.dataset.governanceIdentity) openIdentityDetail(governanceUser.dataset.governanceIdentity);
   });
 
+  document.querySelector("#workspace-governance-list").addEventListener("click", (event) => {
+    const governanceUser = event.target.closest("[data-governance-identity]");
+    if (governanceUser?.dataset.governanceIdentity) {
+      closeModals();
+      openIdentityDetail(governanceUser.dataset.governanceIdentity);
+    }
+  });
+
   document.querySelector("#notification-button").addEventListener("click", () => {
     document.querySelector("#notification-panel").classList.toggle("is-visible");
   });
@@ -2311,6 +2379,11 @@ function bindEvents() {
     renderAudit();
   });
 
+  document.querySelector("#workspace-governance-search").addEventListener("input", (event) => {
+    state.workspaceGovernanceSearch = event.target.value;
+    renderWorkspaceGovernanceModal();
+  });
+
   document.querySelector("#groups-modal").addEventListener("click", (event) => {
     const addButton = event.target.closest("[data-group-add]");
     const removeButton = event.target.closest("[data-group-remove]");
@@ -2375,6 +2448,11 @@ function bindEvents() {
 
       if (button.dataset.action === "map-app") {
         openCreateGroupModal();
+        return;
+      }
+
+      if (button.dataset.action === "workspace-governance") {
+        openWorkspaceGovernanceModal();
         return;
       }
 
