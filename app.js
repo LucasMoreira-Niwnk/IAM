@@ -1590,16 +1590,28 @@ function ouDisplayName(ouDn) {
     .join(" / ");
 }
 
+function ouFolderName(ouDn) {
+  const firstOu = String(ouDn)
+    .split(",")
+    .map((part) => part.trim())
+    .find((part) => part.toUpperCase().startsWith("OU="));
+  return firstOu ? firstOu.replace(/^OU=/i, "") : ouDisplayName(ouDn);
+}
+
 function uniqueOus(records) {
   const ous = records
     .map((record) => ouFromDistinguishedName(record.distinguished_name))
     .filter(Boolean);
-  return [...new Set(ous)].sort((a, b) => ouDisplayName(a).localeCompare(ouDisplayName(b), "pt-BR"));
+  return [...new Set(ous)].sort((a, b) =>
+    `${ouFolderName(a)} ${a}`.localeCompare(`${ouFolderName(b)} ${b}`, "pt-BR"),
+  );
 }
 
 function renderOuList({ records, listSelector, countSelector, searchTerm = "", emptyText }) {
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const ous = uniqueOus(records).filter((ou) => `${ouDisplayName(ou)} ${ou}`.toLowerCase().includes(normalizedSearch));
+  const ous = uniqueOus(records).filter((ou) =>
+    `${ouFolderName(ou)} ${ouDisplayName(ou)} ${ou}`.toLowerCase().includes(normalizedSearch),
+  );
   document.querySelector(countSelector).textContent = `${ous.length} OU(s)`;
   document.querySelector(listSelector).innerHTML = ous.length
     ? ous
@@ -1609,7 +1621,7 @@ function renderOuList({ records, listSelector, countSelector, searchTerm = "", e
             <label class="ou-card">
               <input type="radio" name="${listSelector.replace("#", "")}" value="${ou}" ${index === 0 ? "checked" : ""} />
               <span>
-                <strong>${ouDisplayName(ou)}</strong>
+                <strong>${ouFolderName(ou)}</strong>
                 <small>${ou}</small>
               </span>
             </label>
