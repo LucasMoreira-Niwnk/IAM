@@ -80,6 +80,7 @@ class CreateUserRequest(BaseModel):
     target_ou: str
     password: str
     must_change_password: bool = True
+    copy_groups_from_identity_id: str | None = None
 
 
 class ResetPasswordRequest(BaseModel):
@@ -627,6 +628,49 @@ def create_identity(payload: CreateUserRequest, request: Request) -> dict:
                 synced_at,
             ),
         )
+        copied_groups: list[dict] = []
+        failed_groups: list[dict] = []
+        source_identity_name = None
+        source_identity_id = (payload.copy_groups_from_identity_id or "").strip()
+        if source_identity_id:
+            source_identity = get_identity_or_404(connection, source_identity_id)
+            source_identity_name = source_identity.get("display_name") or source_identity.get("username")
+            source_groups = connection.execute(
+                """
+                SELECT group_name, group_dn, is_critical
+                FROM identity_groups
+                WHERE identity_id = ?
+                ORDER BY group_name COLLATE NOCASE
+                """,
+                (source_identity_id,),
+            ).fetchall()
+            ldap_client = ReadOnlyLdapClient(settings)
+            for group in rows_to_dicts(source_groups):
+                try:
+                    ldap_client.add_user_to_group(created["distinguished_name"], group["group_dn"])
+                    connection.execute(
+                        """
+                        INSERT OR REPLACE INTO identity_groups (
+                            identity_id, group_dn, group_name, is_critical, synced_at
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            identity_id,
+                            group["group_dn"],
+                            group["group_name"],
+                            group["is_critical"],
+                            synced_at,
+                        ),
+                    )
+                    copied_groups.append(group)
+                except Exception as exc:
+                    failed_groups.append(
+                        {
+                            "group_name": group.get("group_name"),
+                            "group_dn": group.get("group_dn"),
+                            "error": str(exc),
+                        }
+                    )
         log_audit_event(
             connection,
             operator,
@@ -634,11 +678,22 @@ def create_identity(payload: CreateUserRequest, request: Request) -> dict:
             target_type="identity",
             target_name=created["display_name"],
             target_dn=created["distinguished_name"],
-            status="success",
-            details={"username": created["username"], "must_change_password": payload.must_change_password},
+            status="failed" if failed_groups else "success",
+            details={
+                "username": created["username"],
+                "must_change_password": payload.must_change_password,
+                "copy_groups_from": source_identity_name,
+                "copied_groups": [group["group_name"] for group in copied_groups],
+                "failed_groups": failed_groups,
+            },
         )
         connection.commit()
-        return {"ok": True, "identity": get_identity_or_404(connection, identity_id)}
+        return {
+            "ok": True,
+            "identity": get_identity_or_404(connection, identity_id),
+            "copied_groups": copied_groups,
+            "failed_groups": failed_groups,
+        }
 
 
 @app.post("/api/identities/{identity_id}/password")

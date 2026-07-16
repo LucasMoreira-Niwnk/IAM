@@ -18,6 +18,8 @@ const state = {
   selectedGroupDn: null,
   selectedGroupMembers: [],
   groupMemberSearch: "",
+  copyGroupsSourceIdentityId: null,
+  copyGroupsSourceGroups: [],
   selectedOperatorId: null,
   activeFilter: "all",
   identityPage: 1,
@@ -1788,9 +1790,69 @@ function renderGroupOuList(searchTerm = "") {
   });
 }
 
+function renderCopyGroupsPreview() {
+  const preview = document.querySelector("#copy-groups-preview");
+  if (!preview) return;
+
+  if (!state.copyGroupsSourceIdentityId) {
+    preview.innerHTML = "Nenhum usuÃ¡rio base selecionado.";
+    return;
+  }
+
+  if (!state.copyGroupsSourceGroups.length) {
+    preview.innerHTML = "O usuÃ¡rio base selecionado nÃ£o possui grupos retornados pelo Ãºltimo sync.";
+    return;
+  }
+
+  const visibleGroups = state.copyGroupsSourceGroups.slice(0, 8);
+  const remaining = state.copyGroupsSourceGroups.length - visibleGroups.length;
+  preview.innerHTML = `
+    <strong>${state.copyGroupsSourceGroups.length} grupo(s) serÃ£o copiados</strong>
+    <div class="copy-group-tags">
+      ${visibleGroups.map((group) => `<span>${escapeHtml(group.group_name)}</span>`).join("")}
+      ${remaining > 0 ? `<span>+${remaining}</span>` : ""}
+    </div>
+  `;
+}
+
+function renderCopyUserList(searchTerm = "") {
+  const list = document.querySelector("#copy-groups-user-list");
+  if (!list) return;
+
+  const term = normalizeText(searchTerm);
+  const matches = state.identities
+    .filter((identity) => {
+      const name = `${identity.display_name || ""} ${identity.username || ""} ${identity.email || ""}`;
+      return !term || normalizeText(name).includes(term);
+    })
+    .slice(0, 6);
+
+  list.innerHTML = matches.length
+    ? matches
+        .map(
+          (identity) => `
+            <button class="copy-user-card ${identity.id === state.copyGroupsSourceIdentityId ? "is-selected" : ""}" type="button" data-copy-user-id="${escapeHtml(identity.id)}">
+              <span class="avatar">${initials(identity.display_name || identity.username)}</span>
+              <span>
+                <strong>${escapeHtml(identity.display_name || identity.username)}</strong>
+                <small>${escapeHtml(identity.username || "-")} - ${Number(identity.group_count || 0)} grupo(s)</small>
+              </span>
+            </button>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhum usuÃ¡rio encontrado.</div>`;
+
+  renderCopyGroupsPreview();
+}
+
 function openCreateUserModal() {
   const searchInput = document.querySelector("#user-ou-search");
+  const copySearchInput = document.querySelector("#copy-groups-user-search");
   searchInput.value = "";
+  copySearchInput.value = "";
+  state.copyGroupsSourceIdentityId = null;
+  state.copyGroupsSourceGroups = [];
   [
     "#create-user-first-name",
     "#create-user-last-name",
@@ -1805,6 +1867,7 @@ function openCreateUserModal() {
   });
   document.querySelector("#create-user-must-change").checked = true;
   renderUserOuList();
+  renderCopyUserList();
   openModal("#create-user-modal");
   window.setTimeout(() => document.querySelector("#create-user-modal input").focus(), 0);
 }
@@ -1913,6 +1976,7 @@ async function submitCreateUser() {
     target_ou: selectedUserOu(),
     password,
     must_change_password: document.querySelector("#create-user-must-change").checked,
+    copy_groups_from_identity_id: state.copyGroupsSourceIdentityId || null,
   };
 
   if (!payload.first_name || !payload.last_name || !payload.username || !payload.password || !payload.target_ou) {
@@ -1934,7 +1998,12 @@ async function submitCreateUser() {
     renderMetrics();
     await refreshAudit();
     closeModals();
-    showToast(`Usuário ${result.identity.username} criado no AD.`);
+    const copiedCount = result.copied_groups?.length || 0;
+    const failedCount = result.failed_groups?.length || 0;
+    const groupSummary = state.copyGroupsSourceIdentityId
+      ? ` ${copiedCount} grupo(s) copiados${failedCount ? `, ${failedCount} falharam` : ""}.`
+      : "";
+    showToast(`Usuário ${result.identity.username} criado no AD.${groupSummary}`);
   } catch (error) {
     showToast(`Falha ao criar usuário: ${error.message}`);
   } finally {
@@ -2371,6 +2440,28 @@ function bindEvents() {
 
   document.querySelector("#user-ou-search").addEventListener("input", (event) => {
     renderUserOuList(event.target.value);
+  });
+
+  document.querySelector("#copy-groups-user-search").addEventListener("input", (event) => {
+    renderCopyUserList(event.target.value);
+  });
+
+  document.querySelector("#copy-groups-user-list").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-copy-user-id]");
+    if (!button) return;
+
+    state.copyGroupsSourceIdentityId = button.dataset.copyUserId;
+    state.copyGroupsSourceGroups = [];
+    renderCopyUserList(document.querySelector("#copy-groups-user-search").value);
+    document.querySelector("#copy-groups-preview").textContent = "Carregando grupos do usuÃ¡rio base...";
+
+    try {
+      state.copyGroupsSourceGroups = await apiGet(`/api/identities/${encodeURIComponent(state.copyGroupsSourceIdentityId)}/groups`);
+    } catch (error) {
+      state.copyGroupsSourceGroups = [];
+      showToast(`Falha ao carregar grupos do usuÃ¡rio base: ${error.message}`);
+    }
+    renderCopyUserList(document.querySelector("#copy-groups-user-search").value);
   });
 
   document.querySelector("#move-ou-search").addEventListener("input", (event) => {
