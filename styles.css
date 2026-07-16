@@ -681,6 +681,14 @@ button:disabled {
   white-space: nowrap;
 }
 
+.review-item .badge,
+.audit-feed .badge,
+.notification-item .badge,
+.access-card .badge,
+.identity-badges .badge {
+  color: #ffffff;
+}
+
 .access-card .badge {
   width: 100%;
   min-height: 26px;
@@ -698,6 +706,7 @@ button:disabled {
 
 .badge.low,
 .badge.active {
+  color: #ffffff;
   background: var(--green);
 }
 
@@ -713,12 +722,14 @@ button:disabled {
 
 .badge.medium,
 .badge.review {
+  color: #ffffff;
   background: var(--amber);
 }
 
 .badge.high,
 .badge.blocked,
 .badge.disabled {
+  color: #ffffff;
   background: var(--red);
 }
 

@@ -30,6 +30,11 @@ const statusLabels = {
   review: "Em revisão",
   blocked: "Bloqueado",
   disabled: "Desabilitado",
+  success: "Sucesso",
+  failed: "Falha",
+  running: "Em execução",
+  failure: "Falha",
+  error: "Erro",
 };
 
 const riskLabels = {
@@ -192,7 +197,14 @@ function statusLabel(status) {
 }
 
 function statusClass(status) {
-  return status || "review";
+  const classes = {
+    success: "success",
+    failed: "high",
+    failure: "high",
+    error: "high",
+    running: "review",
+  };
+  return classes[status] || status || "review";
 }
 
 function criticality(identity) {
@@ -378,8 +390,8 @@ function renderReviews() {
             <strong>${auditActionLabel(event.action)}</strong>
             <span>${formatSyncTime(event.occurred_at)} - ${operator} em ${target}</span>
           </div>
-          <span class="badge ${isCritical ? "high" : event.status === "success" ? "success" : "review"}">
-            ${isCritical ? "Crítico" : event.status}
+          <span class="badge ${isCritical ? "high" : statusClass(event.status)}">
+            ${isCritical ? "Crítico" : statusLabel(event.status)}
           </span>
         </article>
       `;
@@ -398,7 +410,8 @@ function renderSidebarSyncStatus() {
     return;
   }
 
-  statusEl.textContent = latest.status === "success" ? "Sincronização concluída" : `Sincronização ${latest.status}`;
+  statusEl.textContent =
+    latest.status === "success" ? "Sincronização concluída" : `Sincronização ${statusLabel(latest.status)}`;
   lastSyncEl.textContent = `Última leitura: ${formatSyncTime(latest.finished_at || latest.started_at)}`;
 }
 
@@ -950,7 +963,7 @@ function renderAudit() {
                 <strong>${auditActionLabel(event.action)}</strong>
                 <small>${operator} - ${target}</small>
               </div>
-              <span class="badge sync-status ${event.status === "success" ? "success" : "review"}">${event.status}</span>
+              <span class="badge sync-status ${statusClass(event.status)}">${statusLabel(event.status)}</span>
             </li>
           `;
         })
