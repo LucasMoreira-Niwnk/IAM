@@ -2143,6 +2143,7 @@ async function changeIdentityGroup(action, groupDn, groupName, isCritical = fals
     });
     await renderIdentityDetail(identity.id);
     renderIdentities();
+    renderGroupEditor(document.querySelector("#group-picker-search")?.value || "");
     await refreshAudit();
     showToast(action === "add" ? "Grupo adicionado no AD." : "Grupo removido no AD.");
   } catch (error) {
