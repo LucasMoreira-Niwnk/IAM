@@ -291,6 +291,8 @@ def operator_response(session: dict, operator: dict | None = None) -> dict:
         **session,
         "identity_id": operator.get("identity_id") if operator else None,
         "status": status,
+        "title": operator.get("title") if operator else session.get("title"),
+        "department": operator.get("department") if operator else session.get("department"),
         "permissions": permissions,
         "permission_source": source,
         "is_admin": permissions.get("manageOperators", False),

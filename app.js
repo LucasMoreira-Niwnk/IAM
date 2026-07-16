@@ -445,14 +445,15 @@ function currentUserName() {
 function renderCurrentUser() {
   const name = currentUserName();
   const role =
-    state.currentUser?.role ||
     state.currentUser?.title ||
     state.operators.find((operator) => operator.display_name === name || operator.username === name)?.title ||
-    "Service Desk";
+    "";
+  const roleElement = document.querySelector("#current-user-role");
 
   document.querySelector("#current-user-avatar").textContent = initials(name);
   document.querySelector("#current-user-name").textContent = name;
-  document.querySelector("#current-user-role").textContent = role || "Service Desk";
+  roleElement.textContent = role;
+  roleElement.hidden = !role;
 }
 
 function renderReviews() {
