@@ -1096,15 +1096,32 @@ def workspace_disabled_members() -> dict:
                 tuple(group.lower() for group in GOVERNANCE_WORKSPACE_GROUPS),
             ).fetchall(),
         )
-        groups = {}
+        disabled_groups = {}
         for row in rows:
             group_name = row["group_name"]
-            groups[group_name] = groups.get(group_name, 0) + 1
+            disabled_groups[group_name] = disabled_groups.get(group_name, 0) + 1
+
+        member_rows = rows_to_dicts(
+            connection.execute(
+                f"""
+                SELECT
+                    group_name,
+                    COUNT(DISTINCT identity_id) AS member_count
+                FROM identity_groups
+                WHERE lower(group_name) IN ({placeholders})
+                GROUP BY group_name
+                """,
+                tuple(group.lower() for group in GOVERNANCE_WORKSPACE_GROUPS),
+            ).fetchall(),
+        )
+        members_by_group = {row["group_name"]: row["member_count"] for row in member_rows}
 
         return {
             "groups": list(GOVERNANCE_WORKSPACE_GROUPS),
             "total": len(rows),
-            "by_group": groups,
+            "members_total": sum(int(count or 0) for count in members_by_group.values()),
+            "by_group": disabled_groups,
+            "members_by_group": members_by_group,
             "users": rows,
         }
 

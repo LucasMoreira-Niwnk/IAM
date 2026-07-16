@@ -438,6 +438,8 @@ function renderMetrics() {
   document.querySelector("#metric-privileged").textContent = state.critical.users_count || 0;
   document.querySelector("#metric-operations").textContent = operationsToday;
   document.querySelector("#metric-operators").textContent = state.operators.length;
+  document.querySelector("#metric-gw-users").textContent =
+    state.governance.workspace_disabled_members?.members_total || 0;
 }
 
 function currentUserName() {
