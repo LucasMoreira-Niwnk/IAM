@@ -1,6 +1,7 @@
 const API_BASE_URL = window.IAM_API_BASE_URL || localStorage.getItem("IAM_API_BASE_URL") || "";
 const SESSION_TIMEOUT_MS =
   Number(window.IAM_SESSION_TIMEOUT_MS || localStorage.getItem("IAM_SESSION_TIMEOUT_MS")) || 30 * 60 * 1000;
+const DISMISSED_NOTIFICATIONS_KEY = "IAM_DISMISSED_NOTIFICATIONS";
 let sessionTimeoutId = null;
 
 const state = {
@@ -26,7 +27,39 @@ const state = {
   auditOperatorFilter: "",
   loading: true,
   apiOnline: false,
+  dismissedNotifications: loadDismissedNotifications(),
 };
+
+function loadDismissedNotifications() {
+  try {
+    const value = JSON.parse(localStorage.getItem(DISMISSED_NOTIFICATIONS_KEY) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDismissedNotifications() {
+  localStorage.setItem(DISMISSED_NOTIFICATIONS_KEY, JSON.stringify(state.dismissedNotifications.slice(-200)));
+}
+
+function notificationId(notification) {
+  return [notification.type, notification.title, notification.description, notification.time].join("|");
+}
+
+function dismissNotification(id) {
+  if (!id || state.dismissedNotifications.includes(id)) return;
+  state.dismissedNotifications.push(id);
+  saveDismissedNotifications();
+  renderNotifications();
+}
+
+function dismissVisibleNotifications() {
+  const ids = dashboardNotifications().map(notificationId);
+  state.dismissedNotifications = Array.from(new Set([...state.dismissedNotifications, ...ids]));
+  saveDismissedNotifications();
+  renderNotifications();
+}
 
 const statusLabels = {
   active: "Ativo",
@@ -530,7 +563,7 @@ function dashboardNotifications() {
     .filter((event) => event.action === "add_group_member" && eventTargetsCriticalGroup(event))
     .slice(0, 5);
 
-  return [
+  const notifications = [
     ...failedSyncs.map((run) => ({
       type: "Falha no sync",
       title: `Sincronização ${statusLabel(run.status)}`,
@@ -549,6 +582,8 @@ function dashboardNotifications() {
       };
     }),
   ].sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
+
+  return notifications.filter((notification) => !state.dismissedNotifications.includes(notificationId(notification)));
 }
 
 function renderNotifications() {
@@ -559,32 +594,38 @@ function renderNotifications() {
 
   count.textContent = notifications.length;
   button.classList.toggle("has-notifications", notifications.length > 0);
-  panel.innerHTML = notifications.length
-    ? `
-      <div class="notification-header">
-        <strong>Notificações</strong>
-        <span>${notifications.length} alerta(s)</span>
-      </div>
-      ${notifications
-        .map(
-          (notification) => `
-            <article class="notification-item">
-              <span class="badge ${notification.severity}">${notification.type}</span>
-              <strong>${notification.title}</strong>
-              <small>${notification.description}</small>
-              <small>${formatSyncTime(notification.time)}</small>
-            </article>
-          `,
-        )
-        .join("")}
-    `
-    : `
+  if (!notifications.length) {
+    panel.innerHTML = `
       <div class="notification-header">
         <strong>Notificações</strong>
         <span>0 alerta</span>
       </div>
       <div class="empty-state">Sem alertas de sync ou grupos críticos.</div>
     `;
+    return;
+  }
+
+  panel.innerHTML = `
+    <div class="notification-header">
+      <strong>Notificações</strong>
+      <button class="text-button notification-clear" type="button" data-notification-clear>Limpar todas</button>
+    </div>
+    ${notifications
+      .map(
+        (notification) => `
+          <article class="notification-item">
+            <div class="notification-item-head">
+              <span class="badge ${notification.severity}">${notification.type}</span>
+              <button class="icon-button notification-dismiss" type="button" title="Remover notificação" aria-label="Remover notificação" data-notification-dismiss="${encodeURIComponent(notificationId(notification))}">x</button>
+            </div>
+            <strong>${notification.title}</strong>
+            <small>${notification.description}</small>
+            <small>${formatSyncTime(notification.time)}</small>
+          </article>
+        `,
+      )
+      .join("")}
+  `;
 }
 
 function renderIdentities() {
@@ -1983,6 +2024,17 @@ function bindEvents() {
 
   document.querySelector("#notification-button").addEventListener("click", () => {
     document.querySelector("#notification-panel").classList.toggle("is-visible");
+  });
+
+  document.querySelector("#notification-panel").addEventListener("click", (event) => {
+    const dismissButton = event.target.closest("[data-notification-dismiss]");
+    if (dismissButton) {
+      dismissNotification(decodeURIComponent(dismissButton.dataset.notificationDismiss));
+      return;
+    }
+    if (event.target.closest("[data-notification-clear]")) {
+      dismissVisibleNotifications();
+    }
   });
 
   document.addEventListener("click", (event) => {
