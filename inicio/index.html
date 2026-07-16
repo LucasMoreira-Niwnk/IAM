@@ -188,6 +188,7 @@
                 <button class="ghost-button" type="button" data-identity-action="review">Iniciar revisão</button>
                 <button class="ghost-button" type="button" data-identity-action="sessions">Encerrar sessões</button>
                 <button class="ghost-button" type="button" data-identity-action="password">Alterar senha</button>
+                <button class="ghost-button" type="button" data-identity-action="move-ou">Mover OU</button>
                 <button class="ghost-button" type="button" data-identity-action="revoke">Remover grupos</button>
                 <button class="ghost-button" type="button" data-identity-action="unlock">Desbloquear</button>
                 <button class="danger-button" type="button" data-identity-action="block">Bloquear</button>
@@ -475,6 +476,37 @@
         <div class="modal-footer">
           <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
           <button class="primary-button" type="button" data-modal-close>Concluir</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="move-ou-modal" aria-hidden="true">
+      <section class="modal-card wide-modal" role="dialog" aria-modal="true" aria-labelledby="move-ou-modal-title">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Active Directory</p>
+            <h2 id="move-ou-modal-title">Mover usuário de OU</h2>
+          </div>
+          <button class="icon-button" type="button" data-modal-close aria-label="Fechar">X</button>
+        </div>
+
+        <div class="modal-identity" id="move-ou-modal-identity"></div>
+
+        <section class="form-section">
+          <div class="module-header compact-header">
+            <h3>OU de destino</h3>
+            <span id="move-ou-count">0</span>
+          </div>
+          <label class="search group-search">
+            <span aria-hidden="true">S</span>
+            <input id="move-ou-search" type="search" placeholder="Buscar OU de usuários" />
+          </label>
+          <div class="ou-list" id="move-ou-list"></div>
+        </section>
+
+        <div class="modal-footer">
+          <button class="ghost-button" type="button" data-modal-close>Cancelar</button>
+          <button class="primary-button" type="button" id="move-ou-submit">Mover usuário</button>
         </div>
       </section>
     </div>

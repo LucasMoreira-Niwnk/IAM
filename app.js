@@ -290,6 +290,7 @@ function auditActionLabel(action) {
     block_identity: "Bloqueio de identidade",
     disable_identity: "Desabilitação de identidade",
     enable_identity: "Habilitação de identidade",
+    move_identity_ou: "Movimentação de OU",
     add_group_member: "Adição em grupo",
     remove_group_member: "Remoção de grupo",
     update_operator_permissions: "Alteração de permissões",
@@ -323,6 +324,9 @@ function auditEventDescription(event) {
   if (event.action === "create_group") {
     parts.push(`Grupo criado: ${target}`);
   }
+  if (event.action === "move_identity_ou") {
+    parts.push(`Nova OU: ${details.target_ou || details.new_dn || "Não informado"}`);
+  }
   if (event.action === "sync_ad") {
     parts.push(`${details.users_synced || 0} usuários, ${details.groups_synced || 0} grupos`);
   }
@@ -339,6 +343,7 @@ function isAdChangeEvent(event) {
     "block_identity",
     "disable_identity",
     "enable_identity",
+    "move_identity_ou",
     "add_group_member",
     "remove_group_member",
   ].includes(event?.action);
@@ -1388,6 +1393,7 @@ function applyPermissionState() {
   disableByPermission("[data-action='invite-user']", "manageOperators");
   disableByPermission("[data-action='map-app']", "manageGroups");
   disableByPermission("[data-identity-action='password']", "resetPassword");
+  disableByPermission("[data-identity-action='move-ou']", "manageOperators");
   disableByPermission("[data-identity-action='add-group'], [data-identity-action='revoke']", "manageGroups");
   disableByPermission("[data-group-member-action], [data-group-member-add], [data-group-member-remove]", "manageGroups");
   disableByPermission("[data-identity-action='block'], [data-identity-action='unlock'], [data-identity-action='disable'], [data-identity-action='sessions']", "lockUnlock");
@@ -1623,6 +1629,21 @@ function renderUserOuList(searchTerm = "") {
   });
 }
 
+function renderMoveOuList(searchTerm = "") {
+  const identity = selectedIdentity();
+  const currentOu = ouFromDistinguishedName(identity?.distinguished_name || "");
+  const records = state.identities.filter(
+    (record) => ouFromDistinguishedName(record.distinguished_name).toLowerCase() !== currentOu.toLowerCase(),
+  );
+  renderOuList({
+    records,
+    listSelector: "#move-ou-list",
+    countSelector: "#move-ou-count",
+    searchTerm,
+    emptyText: "Nenhuma OU alternativa encontrada no cache sincronizado.",
+  });
+}
+
 function renderGroupOuList(searchTerm = "") {
   renderOuList({
     records: state.groups,
@@ -1654,6 +1675,17 @@ function openCreateUserModal() {
   window.setTimeout(() => document.querySelector("#create-user-modal input").focus(), 0);
 }
 
+function openMoveOuModal() {
+  const identity = selectedIdentity();
+  if (!identity) return;
+  const searchInput = document.querySelector("#move-ou-search");
+  searchInput.value = "";
+  document.querySelector("#move-ou-modal-identity").innerHTML = modalIdentityMarkup(identity);
+  renderMoveOuList();
+  openModal("#move-ou-modal");
+  window.setTimeout(() => searchInput.focus(), 0);
+}
+
 function openCreateGroupModal() {
   const searchInput = document.querySelector("#group-ou-search");
   searchInput.value = "";
@@ -1673,6 +1705,10 @@ function selectedGroupOu() {
 
 function selectedUserOu() {
   return document.querySelector("#user-ou-list input[type='radio']:checked")?.value || "";
+}
+
+function selectedMoveOu() {
+  return document.querySelector("#move-ou-list input[type='radio']:checked")?.value || "";
 }
 
 async function refreshAudit() {
@@ -1803,6 +1839,36 @@ async function submitPasswordReset() {
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = "Alterar senha";
+  }
+}
+
+async function submitMoveOu() {
+  const identity = selectedIdentity();
+  const submitButton = document.querySelector("#move-ou-submit");
+  const targetOu = selectedMoveOu();
+  if (!identity || !targetOu) {
+    showToast("Selecione a OU de destino.");
+    return;
+  }
+
+  submitButton.disabled = true;
+  submitButton.textContent = "Movendo...";
+  try {
+    const result = await apiPost(`/api/identities/${identity.id}/move-ou`, { target_ou: targetOu });
+    state.identities = state.identities.map((item) =>
+      item.id === identity.id || item.username === result.identity.username ? result.identity : item,
+    );
+    state.selectedIdentityId = result.identity.id;
+    await renderIdentityDetail(result.identity.id);
+    renderIdentities();
+    await refreshAudit();
+    closeModals();
+    showToast("Usuário movido para a OU selecionada.");
+  } catch (error) {
+    showToast(`Falha ao mover usuário: ${error.message}`);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Mover usuário";
   }
 }
 
@@ -2109,6 +2175,11 @@ function bindEvents() {
         return;
       }
 
+      if (button.dataset.identityAction === "move-ou") {
+        openMoveOuModal();
+        return;
+      }
+
       if (button.dataset.identityAction === "add-group" || button.dataset.identityAction === "revoke") {
         openGroupsModal();
         return;
@@ -2155,6 +2226,10 @@ function bindEvents() {
     renderUserOuList(event.target.value);
   });
 
+  document.querySelector("#move-ou-search").addEventListener("input", (event) => {
+    renderMoveOuList(event.target.value);
+  });
+
   document.querySelector("#group-ou-search").addEventListener("input", (event) => {
     renderGroupOuList(event.target.value);
   });
@@ -2186,6 +2261,8 @@ function bindEvents() {
   });
 
   document.querySelector("#password-submit").addEventListener("click", submitPasswordReset);
+
+  document.querySelector("#move-ou-submit").addEventListener("click", submitMoveOu);
 
   document.querySelector("#create-user-submit").addEventListener("click", submitCreateUser);
 

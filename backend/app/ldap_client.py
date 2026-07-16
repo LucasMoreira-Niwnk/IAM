@@ -296,6 +296,29 @@ class ReadOnlyLdapClient:
                 self._raise_ldap_write_error(connection, "Falha LDAP ao alterar status do usuario.")
         return new_uac
 
+    def move_user_to_ou(self, user_dn: str, target_ou: str) -> str:
+        destination_ou = target_ou.strip()
+        self._validate_target_ou(destination_ou)
+        parts = str(user_dn or "").split(",", 1)
+        if len(parts) != 2 or not parts[0].upper().startswith("CN="):
+            raise ValueError("DN do usuario invalido para movimentacao.")
+
+        relative_dn, current_parent = parts[0], parts[1]
+        if normalize_dn(current_parent) == normalize_dn(destination_ou):
+            raise ValueError("O usuario ja esta na OU selecionada.")
+
+        new_dn = f"{relative_dn},{destination_ou}"
+        with self._connection(read_only=False) as connection:
+            moved = connection.modify_dn(
+                dn=user_dn,
+                relative_dn=relative_dn,
+                delete_old_dn=True,
+                new_superior=destination_ou,
+            )
+            if not moved:
+                self._raise_ldap_write_error(connection, "Falha LDAP ao mover usuario para a OU selecionada.")
+        return new_dn
+
     def add_user_to_group(self, user_dn: str, group_dn: str) -> None:
         with self._connection(read_only=False) as connection:
             if not connection.modify(group_dn, {"member": [(MODIFY_ADD, [user_dn])]}):

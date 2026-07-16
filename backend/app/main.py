@@ -84,6 +84,10 @@ class ResetPasswordRequest(BaseModel):
     must_change_password: bool = True
 
 
+class MoveIdentityRequest(BaseModel):
+    target_ou: str
+
+
 class GroupMembershipRequest(BaseModel):
     group_dn: str
     group_name: str | None = None
@@ -644,6 +648,48 @@ def update_identity_status(identity_id: str, payload: IdentityStatusRequest, req
         )
         connection.commit()
         return {"ok": True, "identity": get_identity_or_404(connection, identity_id)}
+
+
+@app.post("/api/identities/{identity_id}/move-ou")
+def move_identity_ou(identity_id: str, payload: MoveIdentityRequest, request: Request) -> dict:
+    with db() as connection:
+        operator = require_permission(connection, request, "manageOperators")
+        identity = get_identity_or_404(connection, identity_id)
+        old_dn = identity["distinguished_name"]
+        try:
+            new_dn = ReadOnlyLdapClient(settings).move_user_to_ou(old_dn, payload.target_ou)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        new_identity_id = new_dn if identity_id == old_dn else identity_id
+        if new_identity_id != identity_id:
+            connection.execute("UPDATE identity_groups SET identity_id = ? WHERE identity_id = ?", (new_identity_id, identity_id))
+            connection.execute("UPDATE iam_operators SET identity_id = ? WHERE identity_id = ?", (new_identity_id, identity_id))
+
+        connection.execute(
+            """
+            UPDATE identities
+            SET id = ?,
+                distinguished_name = ?,
+                synced_at = ?
+            WHERE id = ?
+            """,
+            (new_identity_id, new_dn, now_iso(), identity_id),
+        )
+        log_audit_event(
+            connection,
+            operator,
+            action="move_identity_ou",
+            target_type="identity",
+            target_name=identity.get("display_name") or identity.get("username"),
+            target_dn=new_dn,
+            status="success",
+            details={"old_dn": old_dn, "new_dn": new_dn, "target_ou": payload.target_ou},
+        )
+        connection.commit()
+        return {"ok": True, "identity": get_identity_or_404(connection, new_identity_id)}
 
 
 @app.post("/api/identities/{identity_id}/groups/add")
