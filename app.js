@@ -799,6 +799,10 @@ function globalSearchTerm() {
   return document.querySelector("#global-search").value.trim().toLowerCase();
 }
 
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function groupMatchesSearch(group, searchTerm) {
   if (!searchTerm) return true;
   return [group.name, group.description, group.distinguished_name]
