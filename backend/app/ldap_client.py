@@ -192,10 +192,17 @@ class ReadOnlyLdapClient:
     def _raise_ldap_write_error(connection: Connection, fallback: str) -> None:
         result_code = connection.result.get("result")
         description_result = connection.result.get("description")
+        message = str(connection.result.get("message") or "")
         if result_code == 68 or description_result == "entryAlreadyExists":
             raise ValueError("Ja existe um objeto com esse nome na OU selecionada.")
-        message = connection.result.get("message") or description_result or fallback
-        raise RuntimeError(str(message))
+        if result_code == 53 and "problem 5003" in message.lower():
+            raise ValueError(
+                "O AD recusou a operação porque a conta não possui uma senha válida. "
+                "Defina uma senha que atenda à política do domínio antes de habilitar."
+            )
+        if result_code == 53 and "problem 5005" in message.lower():
+            raise ValueError("O AD recusou a senha informada. Verifique complexidade, histórico e tamanho mínimo.")
+        raise RuntimeError(message or str(description_result or fallback))
 
     def create_user(
         self,

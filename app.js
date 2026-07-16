@@ -1248,6 +1248,9 @@ async function updateIdentityStatus(action) {
     await refreshAudit();
     showToast("Status da identidade atualizado no AD.");
   } catch (error) {
+    if (action === "enable" && error.message.toLowerCase().includes("senha válida")) {
+      openPasswordModal();
+    }
     showToast(`Falha ao atualizar status: ${error.message}`);
   }
 }
