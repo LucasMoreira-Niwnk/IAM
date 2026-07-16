@@ -29,7 +29,14 @@ def main() -> int:
     transport = os.getenv("GOOGLE_WORKSPACE_WINRM_TRANSPORT", "ntlm").strip() or "ntlm"
 
     session = winrm.Session(endpoint, auth=(username, password), transport=transport)
-    result = session.run_cmd("schtasks", ["/Run", "/TN", task_name])
+    escaped_task_name = task_name.replace("'", "''")
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        f"Start-ScheduledTask -TaskName '{escaped_task_name}'; "
+        f"Get-ScheduledTaskInfo -TaskName '{escaped_task_name}' | "
+        "Select-Object LastRunTime,LastTaskResult,NextRunTime | Format-List"
+    )
+    result = session.run_ps(script)
 
     stdout = result.std_out.decode("utf-8", errors="ignore").strip()
     stderr = result.std_err.decode("utf-8", errors="ignore").strip()
