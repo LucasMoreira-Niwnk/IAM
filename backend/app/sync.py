@@ -87,6 +87,42 @@ def operator_profile_from_groups(groups: list[Any], settings: Settings) -> tuple
     return False, "pending", {}
 
 
+def merge_identity_by_username(connection: sqlite3.Connection, username: str, identity_id: str, synced_at: str) -> None:
+    if not username:
+        return
+
+    duplicate_rows = connection.execute(
+        """
+        SELECT id
+        FROM identities
+        WHERE lower(username) = lower(?)
+          AND id <> ?
+        """,
+        (username, identity_id),
+    ).fetchall()
+
+    for row in duplicate_rows:
+        old_id = row["id"]
+        target_operator = connection.execute(
+            "SELECT 1 FROM iam_operators WHERE identity_id = ?",
+            (identity_id,),
+        ).fetchone()
+        if target_operator:
+            connection.execute("DELETE FROM iam_operators WHERE identity_id = ?", (old_id,))
+        else:
+            connection.execute(
+                """
+                UPDATE iam_operators
+                SET identity_id = ?, username = ?, last_seen_at = ?
+                WHERE identity_id = ?
+                """,
+                (identity_id, username, synced_at, old_id),
+            )
+
+        connection.execute("DELETE FROM identity_groups WHERE identity_id = ?", (old_id,))
+        connection.execute("DELETE FROM identities WHERE id = ?", (old_id,))
+
+
 class DirectorySyncService:
     def __init__(self, settings: Settings, connection: sqlite3.Connection):
         self.settings = settings
@@ -147,6 +183,7 @@ class DirectorySyncService:
                 dn = str(first(user.get("distinguishedName")) or "")
                 uac = first(user.get("userAccountControl"))
                 status = "disabled" if is_account_disabled(uac) else "active"
+                merge_identity_by_username(self.connection, username, identity_id, synced_at)
 
                 self.connection.execute(
                     """

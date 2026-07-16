@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from .config import settings
 from .database import connect, init_db, rows_to_dicts
 from .ldap_client import ReadOnlyLdapClient
-from .sync import DirectorySyncService
+from .sync import DirectorySyncService, merge_identity_by_username
 
 
 PERMISSION_KEYS = (
@@ -492,6 +492,7 @@ def create_identity(payload: CreateUserRequest, request: Request) -> dict:
 
         synced_at = now_iso()
         identity_id = created["distinguished_name"]
+        merge_identity_by_username(connection, created["username"], identity_id, synced_at)
         connection.execute(
             """
             INSERT INTO identities (
