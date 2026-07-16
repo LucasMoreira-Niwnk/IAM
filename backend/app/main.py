@@ -264,6 +264,9 @@ def permissions_from_ad_groups(connection, operator: dict | None) -> tuple[dict[
     if any(matches_group(group, settings.ldap_operator_group) for group in memberships):
         return ALL_PERMISSIONS.copy(), "active", "ad-admin-full"
     if any(matches_group(group, settings.ldap_viewonly_group) for group in memberships):
+        if int(operator.get("permissions_override") or 0):
+            permissions = sanitize_permissions(parse_permissions(operator.get("permissions_json")))
+            return permissions, "active", "ad-view-only-custom"
         return VIEWONLY_PERMISSIONS.copy(), "active", "ad-view-only"
     return parse_permissions(operator.get("permissions_json")), operator.get("status") or "pending", "local"
 
@@ -288,12 +291,16 @@ def enrich_operator(connection, operator: dict) -> dict:
 
 def operator_response(session: dict, operator: dict | None = None) -> dict:
     live_profile = permissions_from_access_level(session.get("access_level"))
-    if live_profile:
+    if live_profile and session.get("access_level") == "admin_full":
         permissions, status, source = live_profile
     else:
         permissions = parse_permissions(operator.get("permissions_json") if operator else None)
         status = operator.get("status") if operator else "pending"
         source = operator.get("permission_source") if operator else "none"
+        if session.get("access_level") == "view_only" and not permissions:
+            permissions = VIEWONLY_PERMISSIONS.copy()
+            status = "active"
+            source = "ldap-login-view-only"
     return {
         **session,
         "identity_id": operator.get("identity_id") if operator else None,
@@ -1012,7 +1019,7 @@ def update_operator_permissions(identity_id: str, payload: OperatorPermissionsRe
 
         operator = dict(row)
         _, _, source = permissions_from_ad_groups(connection, operator)
-        if source.startswith("ad-"):
+        if source == "ad-admin-full":
             raise HTTPException(
                 status_code=409,
                 detail="Permissões deste operador são controladas por grupo do AD.",
@@ -1025,7 +1032,8 @@ def update_operator_permissions(identity_id: str, payload: OperatorPermissionsRe
             """
             UPDATE iam_operators
             SET permissions_json = ?,
-                status = ?
+                status = ?,
+                permissions_override = 1
             WHERE identity_id = ?
             """,
             (json.dumps(permissions), status, identity_id),

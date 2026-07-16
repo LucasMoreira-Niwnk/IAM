@@ -276,6 +276,7 @@ function permissionSourceLabel(source) {
   const labels = {
     "ad-admin-full": "Grupo AD: Admin full",
     "ad-view-only": "Grupo AD: Visualização",
+    "ad-view-only-custom": "Grupo AD: Visualização customizada",
     "ldap-login-admin-full": "Login LDAP: Admin full",
     "ldap-login-view-only": "Login LDAP: Visualização",
     local: "Permissões locais",
@@ -1205,7 +1206,7 @@ function renderOperatorDetail() {
 
   const operatorPermissions = parsePermissions(operator.permissions_json);
   const enabledCount = permissions.filter((permission) => operatorPermissions[permission.key]).length;
-  const isAdManagedPermission = String(operator.permission_source || "").startsWith("ad-");
+  const isAdManagedPermission = String(operator.permission_source || "") === "ad-admin-full";
 
   document.querySelector("#operator-profile").innerHTML = `
     <div class="identity-avatar">${initials(operator.display_name || operator.username)}</div>

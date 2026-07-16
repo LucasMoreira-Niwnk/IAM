@@ -256,18 +256,29 @@ class DirectorySyncService:
                 )
                 if is_operator:
                     synced_operator_ids.add(identity_id)
+                    viewonly_permissions_json = json.dumps(VIEWONLY_PERMISSIONS)
+                    operator_permissions_json = json.dumps(operator_permissions)
                     self.connection.execute(
                         """
                         INSERT INTO iam_operators (
                             identity_id, username, display_name, email, status,
-                            permissions_json, first_seen_at, last_seen_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            permissions_json, permissions_override, first_seen_at, last_seen_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
                         ON CONFLICT(identity_id) DO UPDATE SET
                             username = excluded.username,
                             display_name = excluded.display_name,
                             email = excluded.email,
                             status = excluded.status,
-                            permissions_json = excluded.permissions_json,
+                            permissions_json = CASE
+                                WHEN excluded.permissions_json = ? AND iam_operators.permissions_override = 1
+                                THEN iam_operators.permissions_json
+                                ELSE excluded.permissions_json
+                            END,
+                            permissions_override = CASE
+                                WHEN excluded.permissions_json = ?
+                                THEN iam_operators.permissions_override
+                                ELSE 0
+                            END,
                             last_seen_at = excluded.last_seen_at
                         """,
                         (
@@ -276,9 +287,11 @@ class DirectorySyncService:
                             first(user.get("displayName")),
                             first(user.get("mail")),
                             operator_status,
-                            json.dumps(operator_permissions),
+                            operator_permissions_json,
                             synced_at,
                             synced_at,
+                            viewonly_permissions_json,
+                            viewonly_permissions_json,
                         ),
                     )
 

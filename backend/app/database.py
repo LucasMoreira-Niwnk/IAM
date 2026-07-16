@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS iam_operators (
     email TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     permissions_json TEXT NOT NULL DEFAULT '{}',
+    permissions_override INTEGER NOT NULL DEFAULT 0,
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     FOREIGN KEY (identity_id) REFERENCES identities(id)
@@ -89,6 +90,14 @@ def connect(database_path: Path) -> sqlite3.Connection:
 
 def init_db(connection: sqlite3.Connection) -> None:
     connection.executescript(SCHEMA)
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(iam_operators)").fetchall()
+    }
+    if "permissions_override" not in columns:
+        connection.execute(
+            "ALTER TABLE iam_operators ADD COLUMN permissions_override INTEGER NOT NULL DEFAULT 0"
+        )
     connection.commit()
 
 
