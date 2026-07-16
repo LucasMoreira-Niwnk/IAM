@@ -239,6 +239,7 @@ function auditActionLabel(action) {
     add_group_member: "Adição em grupo",
     remove_group_member: "Remoção de grupo",
     update_operator_permissions: "Alteração de permissões",
+    remove_operator: "Remoção de operador",
     sync_ad: "Sincronização AD",
   };
   return labels[action] || action || "Evento";
@@ -1273,6 +1274,29 @@ async function changeIdentityGroup(action, groupDn, groupName, isCritical = fals
   }
 }
 
+async function removeSelectedOperator() {
+  const operator = selectedOperator();
+  if (!operator) return;
+
+  const operatorName = operator.display_name || operator.username || "operador selecionado";
+  const confirmed = window.confirm(
+    `Remover ${operatorName} da lista de operadores do IAM?\n\nPara remoção definitiva, retire o usuário dos grupos IAM no AD e execute uma sincronização.`,
+  );
+  if (!confirmed) return;
+
+  try {
+    await apiPost(`/api/operators/${operator.identity_id}/remove`);
+    state.operators = state.operators.filter((item) => item.identity_id !== operator.identity_id);
+    state.selectedOperatorId = state.operators[0]?.identity_id || null;
+    await refreshAudit();
+    renderOperators();
+    renderMetrics();
+    showToast("Operador removido do IAM local.");
+  } catch (error) {
+    showToast(`Falha ao remover operador: ${error.message}`);
+  }
+}
+
 function bindEvents() {
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
@@ -1515,7 +1539,13 @@ function bindEvents() {
   document.querySelector("#create-group-submit").addEventListener("click", submitCreateGroup);
 
   document.querySelectorAll("[data-operator-action]").forEach((button) => {
-    button.addEventListener("click", () => readonlyNotice(button.textContent.trim()));
+    button.addEventListener("click", () => {
+      if (button.dataset.operatorAction === "remove") {
+        removeSelectedOperator();
+        return;
+      }
+      readonlyNotice(button.textContent.trim());
+    });
   });
 
   document.querySelectorAll("[data-action]").forEach((button) => {

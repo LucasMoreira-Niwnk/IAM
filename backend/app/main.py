@@ -875,6 +875,51 @@ def update_operator_permissions(identity_id: str, payload: OperatorPermissionsRe
         return enrich_operator(connection, dict(updated))
 
 
+@app.post("/api/operators/{identity_id}/remove")
+def remove_operator(identity_id: str, request: Request) -> dict:
+    with db() as connection:
+        current_operator = require_permission(connection, request, "manageOperators")
+        row = connection.execute(
+            """
+            SELECT *
+            FROM iam_operators
+            WHERE identity_id = ?
+            """,
+            (identity_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Operador não encontrado.")
+
+        operator = dict(row)
+        same_identity = current_operator.get("identity_id") and current_operator.get("identity_id") == identity_id
+        same_username = (
+            current_operator.get("username")
+            and operator.get("username")
+            and current_operator.get("username").lower() == operator.get("username").lower()
+        )
+        if same_identity or same_username:
+            raise HTTPException(status_code=400, detail="Você não pode remover o próprio operador logado.")
+
+        connection.execute(
+            """
+            DELETE FROM iam_operators
+            WHERE identity_id = ?
+            """,
+            (identity_id,),
+        )
+        log_audit_event(
+            connection,
+            current_operator,
+            action="remove_operator",
+            target_type="operator",
+            target_name=operator.get("display_name") or operator.get("username"),
+            status="success",
+            details={"target_username": operator.get("username")},
+        )
+        connection.commit()
+        return {"ok": True}
+
+
 @app.get("/api/critical-permissions")
 def critical_permissions() -> dict:
     with db() as connection:

@@ -299,7 +299,6 @@
                 <p class="eyebrow">Controle interno</p>
                 <h2>Operadores do IAM</h2>
               </div>
-              <button class="primary-button" type="button" data-operator-action="create">Novo operador</button>
             </div>
 
             <section class="service-account-panel" aria-label="Conta de serviço">
@@ -314,18 +313,18 @@
             <section class="provisioning-panel" aria-label="Provisionamento de operadores">
               <article>
                 <span class="panel-kicker">Grupo de entrada</span>
-                <strong>GG-IAM-OPERADORES</strong>
-                <small>Usuários neste grupo do AD podem autenticar no IAM via LDAP.</small>
+                <strong>GG-IAM-OPERADORES / GG-IAM-VIEWONLY</strong>
+                <small>Usuários nestes grupos do AD podem autenticar no IAM via LDAP.</small>
               </article>
               <article>
                 <span class="panel-kicker">Permissão inicial</span>
-                <strong>Sem acesso operacional</strong>
-                <small>Novos operadores entram sem permissões até um administrador liberar o escopo.</small>
+                <strong>Definida pelo grupo AD</strong>
+                <small>Admin full recebe todas as permissões; visualização recebe apenas consulta.</small>
               </article>
               <article>
                 <span class="panel-kicker">Autorização</span>
-                <strong>Controlada no IAM</strong>
-                <small>As permissões abaixo definem quais ações o operador pode executar pela conta de serviço.</small>
+                <strong>Controlada por grupos</strong>
+                <small>Para remover o acesso definitivo, retire o usuário do grupo no AD e sincronize.</small>
               </article>
             </section>
 
@@ -335,7 +334,7 @@
               <section class="operator-detail">
                 <div class="module-header">
                   <h3>Permissões do operador</h3>
-                  <button class="ghost-button" type="button" data-operator-action="save">Salvar permissões</button>
+                  <button class="danger-button" type="button" data-operator-action="remove">Remover operador</button>
                 </div>
                 <div class="operator-profile" id="operator-profile"></div>
                 <div class="permission-grid" id="permission-grid"></div>

@@ -139,6 +139,7 @@ class DirectorySyncService:
                 )
 
             self.connection.execute("DELETE FROM identity_groups")
+            synced_operator_ids: set[str] = set()
 
             for user in result.users:
                 identity_id = object_guid(user.get("objectGUID")) or str(first(user.get("sAMAccountName")))
@@ -217,6 +218,7 @@ class DirectorySyncService:
                     self.settings,
                 )
                 if is_operator:
+                    synced_operator_ids.add(identity_id)
                     self.connection.execute(
                         """
                         INSERT INTO iam_operators (
@@ -242,6 +244,15 @@ class DirectorySyncService:
                             synced_at,
                         ),
                     )
+
+            if synced_operator_ids:
+                placeholders = ",".join("?" for _ in synced_operator_ids)
+                self.connection.execute(
+                    f"DELETE FROM iam_operators WHERE identity_id NOT IN ({placeholders})",
+                    tuple(synced_operator_ids),
+                )
+            else:
+                self.connection.execute("DELETE FROM iam_operators")
 
             self.connection.execute(
                 """
