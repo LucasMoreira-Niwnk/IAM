@@ -41,6 +41,8 @@ class Settings:
     ldap_page_size: int = int(os.getenv("LDAP_PAGE_SIZE", "500"))
     ldap_use_ssl: bool = _bool_env("LDAP_USE_SSL", True)
     critical_groups: tuple[str, ...] = tuple(_csv_env("CRITICAL_GROUPS"))
+    google_workspace_sync_command: str = os.getenv("GOOGLE_WORKSPACE_SYNC_COMMAND", "")
+    google_workspace_sync_timeout_seconds: int = int(os.getenv("GOOGLE_WORKSPACE_SYNC_TIMEOUT_SECONDS", "120"))
 
 
 settings = Settings()

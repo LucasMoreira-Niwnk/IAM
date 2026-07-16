@@ -5,6 +5,8 @@ import hashlib
 import hmac
 import json
 import secrets
+import shlex
+import subprocess
 import time
 from datetime import datetime, timezone
 
@@ -441,6 +443,84 @@ def sync_ad(request: Request) -> dict:
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/sync/google-workspace")
+def sync_google_workspace(request: Request) -> dict:
+    with db() as connection:
+        operator = require_permission(connection, request, "syncAd")
+        command = settings.google_workspace_sync_command.strip()
+        if not command:
+            raise HTTPException(
+                status_code=400,
+                detail="GOOGLE_WORKSPACE_SYNC_COMMAND nao configurado no backend.",
+            )
+
+        started_at = now_iso()
+        try:
+            completed = subprocess.run(
+                shlex.split(command),
+                capture_output=True,
+                text=True,
+                timeout=settings.google_workspace_sync_timeout_seconds,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            details = {
+                "started_at": started_at,
+                "timeout_seconds": settings.google_workspace_sync_timeout_seconds,
+                "error": "timeout",
+            }
+            log_audit_event(
+                connection,
+                operator,
+                action="sync_google_workspace",
+                target_type="directory",
+                target_name="Google Workspace",
+                status="failed",
+                details=details,
+            )
+            connection.commit()
+            raise HTTPException(status_code=504, detail="Tempo limite excedido ao executar sync Google Workspace.") from exc
+        except Exception as exc:
+            log_audit_event(
+                connection,
+                operator,
+                action="sync_google_workspace",
+                target_type="directory",
+                target_name="Google Workspace",
+                status="failed",
+                details={"started_at": started_at, "error": str(exc)},
+            )
+            connection.commit()
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        details = {
+            "started_at": started_at,
+            "finished_at": now_iso(),
+            "return_code": completed.returncode,
+            "stdout": (completed.stdout or "")[-2000:],
+            "stderr": (completed.stderr or "")[-2000:],
+        }
+        status = "success" if completed.returncode == 0 else "failed"
+        log_audit_event(
+            connection,
+            operator,
+            action="sync_google_workspace",
+            target_type="directory",
+            target_name="Google Workspace",
+            status=status,
+            details=details,
+        )
+        connection.commit()
+
+        if completed.returncode != 0:
+            raise HTTPException(
+                status_code=502,
+                detail=completed.stderr.strip() or completed.stdout.strip() or "Sync Google Workspace retornou falha.",
+            )
+
+        return {"ok": True, **details}
 
 
 @app.get("/api/identities")

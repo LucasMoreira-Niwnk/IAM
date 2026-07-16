@@ -298,6 +298,7 @@ function auditActionLabel(action) {
     update_operator_permissions: "Alteração de permissões",
     remove_operator: "Remoção de operador",
     sync_ad: "Sincronização AD",
+    sync_google_workspace: "Sync Google Workspace",
   };
   return labels[action] || action || "Evento";
 }
@@ -331,6 +332,9 @@ function auditEventDescription(event) {
   }
   if (event.action === "sync_ad") {
     parts.push(`${details.users_synced || 0} usuários, ${details.groups_synced || 0} grupos`);
+  }
+  if (event.action === "sync_google_workspace") {
+    parts.push(`Retorno: ${details.return_code ?? "-"}`);
   }
 
   return parts.join(" - ");
@@ -1477,7 +1481,7 @@ function exportCriticalReport() {
 }
 
 function applyPermissionState() {
-  disableByPermission("[data-action='sync']", "syncAd");
+  disableByPermission("[data-action='sync'], [data-action='sync-google-workspace']", "syncAd");
   disableByPermission("[data-action='invite-user']", "manageOperators");
   disableByPermission("[data-action='map-app']", "manageGroups");
   disableByPermission("[data-identity-action='password']", "resetPassword");
@@ -2427,6 +2431,22 @@ function bindEvents() {
 
   document.querySelectorAll("[data-action]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (button.dataset.action === "sync-google-workspace") {
+        button.disabled = true;
+        showToast("Sync Google Workspace iniciado. Aguarde o retorno da tarefa.");
+        try {
+          await apiPost("/api/sync/google-workspace");
+          showToast("Sync Google Workspace executado com sucesso.");
+          await refreshAudit();
+        } catch (error) {
+          showToast(`Falha no sync Google Workspace: ${error.message}`);
+          await refreshAudit();
+        } finally {
+          button.disabled = false;
+        }
+        return;
+      }
+
       if (button.dataset.action === "sync") {
         button.disabled = true;
         showToast("Sincronização AD iniciada. Aguarde o retorno da API.");
