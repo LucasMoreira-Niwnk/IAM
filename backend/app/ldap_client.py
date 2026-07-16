@@ -71,7 +71,7 @@ class ReadOnlyLdapClient:
     def __init__(self, settings: Settings):
         self.settings = settings
 
-    def _connection(self) -> Connection:
+    def _connection(self, read_only: bool = True) -> Connection:
         if not self.settings.ldap_server:
             raise RuntimeError("LDAP_SERVER nao configurado.")
 
@@ -85,7 +85,7 @@ class ReadOnlyLdapClient:
             user=self.settings.ldap_bind_dn,
             password=self.settings.ldap_bind_password,
             auto_bind=True,
-            read_only=True,
+            read_only=read_only,
             raise_exceptions=True,
         )
 
@@ -163,7 +163,7 @@ class ReadOnlyLdapClient:
         if description:
             attributes["description"] = description.strip()
 
-        with self._connection() as connection:
+        with self._connection(read_only=False) as connection:
             created = connection.add(
                 dn=group_dn,
                 object_class=["top", "group"],
@@ -239,7 +239,7 @@ class ReadOnlyLdapClient:
         if department:
             attributes["department"] = department.strip()
 
-        with self._connection() as connection:
+        with self._connection(read_only=False) as connection:
             if not connection.add(
                 dn=user_dn,
                 object_class=["top", "person", "organizationalPerson", "user"],
@@ -267,14 +267,14 @@ class ReadOnlyLdapClient:
     def reset_password(self, user_dn: str, new_password: str, must_change_password: bool) -> None:
         if not new_password:
             raise ValueError("Nova senha obrigatoria.")
-        with self._connection() as connection:
+        with self._connection(read_only=False) as connection:
             self._replace_password(connection, user_dn, new_password)
             pwd_last_set = 0 if must_change_password else -1
             if not connection.modify(user_dn, {"pwdLastSet": [(MODIFY_REPLACE, [pwd_last_set])]}):
                 self._raise_ldap_write_error(connection, "Senha alterada, mas falha ao atualizar pwdLastSet.")
 
     def unlock_user(self, user_dn: str) -> None:
-        with self._connection() as connection:
+        with self._connection(read_only=False) as connection:
             if not connection.modify(user_dn, {"lockoutTime": [(MODIFY_REPLACE, [0])]}):
                 self._raise_ldap_write_error(connection, "Falha LDAP ao desbloquear usuario.")
 
@@ -284,18 +284,18 @@ class ReadOnlyLdapClient:
             new_uac &= ~ACCOUNT_DISABLED_FLAG
         else:
             new_uac |= ACCOUNT_DISABLED_FLAG
-        with self._connection() as connection:
+        with self._connection(read_only=False) as connection:
             if not connection.modify(user_dn, {"userAccountControl": [(MODIFY_REPLACE, [new_uac])]}):
                 self._raise_ldap_write_error(connection, "Falha LDAP ao alterar status do usuario.")
         return new_uac
 
     def add_user_to_group(self, user_dn: str, group_dn: str) -> None:
-        with self._connection() as connection:
+        with self._connection(read_only=False) as connection:
             if not connection.modify(group_dn, {"member": [(MODIFY_ADD, [user_dn])]}):
                 self._raise_ldap_write_error(connection, "Falha LDAP ao adicionar usuario ao grupo.")
 
     def remove_user_from_group(self, user_dn: str, group_dn: str) -> None:
-        with self._connection() as connection:
+        with self._connection(read_only=False) as connection:
             if not connection.modify(group_dn, {"member": [(MODIFY_DELETE, [user_dn])]}):
                 self._raise_ldap_write_error(connection, "Falha LDAP ao remover usuario do grupo.")
 
