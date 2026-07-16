@@ -851,6 +851,10 @@ function identityMatchesSearch(identity, searchTerm) {
     .includes(searchTerm);
 }
 
+function isAdLocked(identity) {
+  return Number(identity.lockout_time || 0) > 0 || identity.status === "blocked";
+}
+
 async function renderIdentityDetail(identityId) {
   if (identityId) state.selectedIdentityId = identityId;
   const identity = selectedIdentity();
@@ -901,6 +905,14 @@ async function renderIdentityDetail(identityId) {
     .join("");
 
   document.querySelector("#identity-security").innerHTML = `
+    <article>
+      <span>Bloqueio no AD</span>
+      <strong>${isAdLocked(identity) ? "Bloqueada" : "Nao bloqueada"}</strong>
+    </article>
+    <article>
+      <span>lockoutTime</span>
+      <strong>${identity.lockout_time || "0"}</strong>
+    </article>
     <article>
       <span>pwdLastSet</span>
       <strong>${identity.pwd_last_set || "-"}</strong>

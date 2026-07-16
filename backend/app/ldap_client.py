@@ -26,6 +26,7 @@ USER_ATTRIBUTES = [
     "userAccountControl",
     "pwdLastSet",
     "lastLogonTimestamp",
+    "lockoutTime",
     "memberOf",
 ]
 

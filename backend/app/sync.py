@@ -70,6 +70,13 @@ def is_account_disabled(user_account_control: Any) -> bool:
         return False
 
 
+def is_account_locked(lockout_time: Any) -> bool:
+    try:
+        return int(first(lockout_time) or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def matches_group(group_dn: str, expected_group: str) -> bool:
     if not expected_group:
         return False
@@ -182,7 +189,13 @@ class DirectorySyncService:
                 username = str(first(user.get("sAMAccountName")) or "")
                 dn = str(first(user.get("distinguishedName")) or "")
                 uac = first(user.get("userAccountControl"))
-                status = "disabled" if is_account_disabled(uac) else "active"
+                lockout_time = first(user.get("lockoutTime"))
+                if is_account_disabled(uac):
+                    status = "disabled"
+                elif is_account_locked(lockout_time):
+                    status = "blocked"
+                else:
+                    status = "active"
                 merge_identity_by_username(self.connection, username, identity_id, synced_at)
 
                 self.connection.execute(
@@ -190,8 +203,8 @@ class DirectorySyncService:
                     INSERT INTO identities (
                         id, username, display_name, email, upn, title, department, manager_dn,
                         phone, location, distinguished_name, status, user_account_control,
-                        pwd_last_set, last_logon_timestamp, synced_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        pwd_last_set, last_logon_timestamp, lockout_time, synced_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         username = excluded.username,
                         display_name = excluded.display_name,
@@ -207,6 +220,7 @@ class DirectorySyncService:
                         user_account_control = excluded.user_account_control,
                         pwd_last_set = excluded.pwd_last_set,
                         last_logon_timestamp = excluded.last_logon_timestamp,
+                        lockout_time = excluded.lockout_time,
                         synced_at = excluded.synced_at
                     """,
                     (
@@ -225,6 +239,7 @@ class DirectorySyncService:
                         int(uac or 0),
                         str(first(user.get("pwdLastSet")) or ""),
                         str(first(user.get("lastLogonTimestamp")) or ""),
+                        str(lockout_time or ""),
                         synced_at,
                     ),
                 )

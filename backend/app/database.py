@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS identities (
     user_account_control INTEGER,
     pwd_last_set TEXT,
     last_logon_timestamp TEXT,
+    lockout_time TEXT,
     synced_at TEXT NOT NULL
 );
 
@@ -98,6 +99,12 @@ def init_db(connection: sqlite3.Connection) -> None:
         connection.execute(
             "ALTER TABLE iam_operators ADD COLUMN permissions_override INTEGER NOT NULL DEFAULT 0"
         )
+    identity_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(identities)").fetchall()
+    }
+    if "lockout_time" not in identity_columns:
+        connection.execute("ALTER TABLE identities ADD COLUMN lockout_time TEXT")
     connection.commit()
 
 

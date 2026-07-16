@@ -596,8 +596,8 @@ def create_identity(payload: CreateUserRequest, request: Request) -> dict:
             INSERT INTO identities (
                 id, username, display_name, email, upn, title, department, manager_dn,
                 phone, location, distinguished_name, status, user_account_control,
-                pwd_last_set, last_logon_timestamp, synced_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pwd_last_set, last_logon_timestamp, lockout_time, synced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 username = excluded.username,
                 display_name = excluded.display_name,
@@ -610,6 +610,7 @@ def create_identity(payload: CreateUserRequest, request: Request) -> dict:
                 user_account_control = excluded.user_account_control,
                 pwd_last_set = excluded.pwd_last_set,
                 last_logon_timestamp = excluded.last_logon_timestamp,
+                lockout_time = excluded.lockout_time,
                 synced_at = excluded.synced_at
             """,
             (
@@ -627,6 +628,7 @@ def create_identity(payload: CreateUserRequest, request: Request) -> dict:
                 "active",
                 512,
                 "0" if payload.must_change_password else "",
+                "",
                 "",
                 synced_at,
             ),
@@ -751,6 +753,7 @@ def update_identity_status(identity_id: str, payload: IdentityStatusRequest, req
                 client.unlock_user(identity["distinguished_name"])
                 new_status = "active"
                 new_uac = identity.get("user_account_control") or 512
+                new_lockout_time = ""
             elif action in {"disable", "block"}:
                 new_uac = client.set_user_enabled(
                     identity["distinguished_name"],
@@ -758,6 +761,7 @@ def update_identity_status(identity_id: str, payload: IdentityStatusRequest, req
                     enabled=False,
                 )
                 new_status = "disabled" if action == "disable" else "blocked"
+                new_lockout_time = (identity.get("lockout_time") or "1") if action == "block" else ""
             elif action == "enable":
                 new_uac = client.set_user_enabled(
                     identity["distinguished_name"],
@@ -765,6 +769,7 @@ def update_identity_status(identity_id: str, payload: IdentityStatusRequest, req
                     enabled=True,
                 )
                 new_status = "active"
+                new_lockout_time = ""
             else:
                 raise ValueError("Ação de status inválida.")
         except ValueError as exc:
@@ -777,10 +782,11 @@ def update_identity_status(identity_id: str, payload: IdentityStatusRequest, req
             UPDATE identities
             SET status = ?,
                 user_account_control = ?,
+                lockout_time = ?,
                 synced_at = ?
             WHERE id = ?
             """,
-            (new_status, int(new_uac), now_iso(), identity_id),
+            (new_status, int(new_uac), new_lockout_time, now_iso(), identity_id),
         )
         log_audit_event(
             connection,
