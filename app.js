@@ -330,6 +330,7 @@ function auditActionLabel(action) {
     remove_group_member: "Remoção de grupo",
     update_operator_permissions: "Alteração de permissões",
     remove_operator: "Remoção de operador",
+    login_failed: "Falha de login",
     sync_ad: "Sincronização AD",
     sync_google_workspace: "Sync Google Workspace",
   };
@@ -368,6 +369,10 @@ function auditEventDescription(event) {
   }
   if (event.action === "sync_google_workspace") {
     parts.push(`Retorno: ${details.return_code ?? "-"}`);
+  }
+  if (event.action === "login_failed") {
+    parts.push(`Usuário informado: ${details.username || target}`);
+    if (details.client_ip) parts.push(`IP: ${details.client_ip}`);
   }
 
   return parts.join(" - ");
@@ -602,6 +607,29 @@ function renderDirectoryIndicators() {
         )
         .join("")
     : `<div class="empty-state">Nenhuma alteração de operador registrada.</div>`;
+}
+
+function renderLoginFailures() {
+  const failures = dashboardAuditEvents()
+    .filter((event) => event.action === "login_failed")
+    .slice(0, 5);
+
+  document.querySelector("#login-failures").innerHTML = failures.length
+    ? failures
+        .map((event) => {
+          const details = auditDetails(event);
+          return `
+            <article class="risk-row login-failure-row">
+              <div class="risk-meta">
+                <span>${escapeHtml(details.username || event.target_name || "Usuario nao informado")}</span>
+                <span class="badge failed">Falha</span>
+              </div>
+              <small>${formatSyncTime(event.occurred_at)}${details.client_ip ? ` - IP ${escapeHtml(details.client_ip)}` : ""}</small>
+            </article>
+          `;
+        })
+        .join("")
+    : `<div class="empty-state">Nenhuma falha de login no periodo selecionado.</div>`;
 }
 
 function renderWorkspaceGovernance() {
@@ -1559,6 +1587,7 @@ function renderAll() {
   renderSidebarSyncStatus();
   renderReviews();
   renderDirectoryIndicators();
+  renderLoginFailures();
   renderWorkspaceGovernance();
   renderNotifications();
   renderIdentities();

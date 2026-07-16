@@ -389,9 +389,24 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/auth/ldap/login")
-def ldap_login(payload: LdapLoginRequest, response: Response) -> dict:
+def ldap_login(payload: LdapLoginRequest, response: Response, request: Request) -> dict:
     user = ReadOnlyLdapClient(settings).authenticate_operator(payload.username, payload.password)
     if not user:
+        with db() as connection:
+            log_audit_event(
+                connection,
+                None,
+                action="login_failed",
+                target_type="operator",
+                target_name=payload.username.strip(),
+                status="failed",
+                details={
+                    "username": payload.username.strip(),
+                    "client_ip": request.client.host if request.client else None,
+                    "user_agent": request.headers.get("user-agent", ""),
+                },
+            )
+            connection.commit()
         raise HTTPException(status_code=401, detail="Credenciais LDAP inválidas ou usuário sem acesso ao IAM.")
 
     user_payload = {

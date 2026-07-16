@@ -851,7 +851,8 @@ button:disabled {
 
 .badge.high,
 .badge.blocked,
-.badge.disabled {
+.badge.disabled,
+.badge.failed {
   color: #ffffff;
   background: var(--red);
 }
