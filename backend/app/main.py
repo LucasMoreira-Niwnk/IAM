@@ -311,6 +311,7 @@ def operator_response(session: dict, operator: dict | None = None) -> dict:
         "permissions": permissions,
         "permission_source": source,
         "is_admin": permissions.get("manageOperators", False),
+        "session_expires_at": session.get("exp"),
     }
 
 
@@ -403,6 +404,8 @@ def ldap_login(payload: LdapLoginRequest, response: Response) -> dict:
         "csrf_token": secrets.token_urlsafe(32),
     }
     token = create_session_token(user_payload)
+    token_payload = read_session_token(token) or {}
+    user_payload["session_expires_at"] = token_payload.get("exp")
     response.set_cookie(
         key=settings.session_cookie_name,
         value=token,

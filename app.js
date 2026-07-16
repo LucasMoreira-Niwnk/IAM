@@ -3,6 +3,7 @@ const SESSION_TIMEOUT_MS =
   Number(window.IAM_SESSION_TIMEOUT_MS || localStorage.getItem("IAM_SESSION_TIMEOUT_MS")) || 30 * 60 * 1000;
 const DISMISSED_NOTIFICATIONS_KEY = "IAM_DISMISSED_NOTIFICATIONS";
 let sessionTimeoutId = null;
+let sessionExpiryTimeoutId = null;
 
 const state = {
   identities: [],
@@ -137,6 +138,10 @@ async function apiGet(path) {
     headers: { Accept: "application/json" },
   });
   if (!response.ok) {
+    if (response.status === 401) {
+      await logout("expired");
+      throw new Error("Sessao expirada.");
+    }
     throw new Error(`GET ${path} retornou ${response.status}`);
   }
   return response.json();
@@ -161,6 +166,10 @@ async function apiPost(path, payload = null) {
     ...options,
   });
   if (!response.ok) {
+    if (response.status === 401) {
+      await logout("expired");
+      throw new Error("Sessao expirada.");
+    }
     const detail = await response.text();
     let message = detail || `POST ${path} retornou ${response.status}`;
     try {
@@ -190,8 +199,12 @@ async function logout(reason = "manual") {
   }
 
   sessionStorage.removeItem("IAM_CSRF_TOKEN");
+  sessionStorage.removeItem("IAM_SESSION_EXPIRES_AT");
   if (reason === "timeout") {
     sessionStorage.setItem("IAM_LOGOUT_REASON", "Sua sessão expirou por inatividade.");
+  }
+  if (reason === "expired") {
+    sessionStorage.setItem("IAM_LOGOUT_REASON", "Sua sessao expirou. Entre novamente.");
   }
 
   window.location.href = "/login.html";
@@ -204,11 +217,28 @@ function resetSessionTimer() {
   }, SESSION_TIMEOUT_MS);
 }
 
+function scheduleSessionExpiry(expiresAt) {
+  window.clearTimeout(sessionExpiryTimeoutId);
+  const expiresAtMs = Number(expiresAt || sessionStorage.getItem("IAM_SESSION_EXPIRES_AT")) * 1000;
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= 0) return;
+
+  const delay = expiresAtMs - Date.now();
+  if (delay <= 0) {
+    logout("expired");
+    return;
+  }
+
+  sessionExpiryTimeoutId = window.setTimeout(() => {
+    logout("expired");
+  }, delay);
+}
+
 function startSessionTimer() {
   ["click", "keydown", "mousemove", "scroll", "touchstart"].forEach((eventName) => {
     document.addEventListener(eventName, resetSessionTimer, { passive: true });
   });
   resetSessionTimer();
+  scheduleSessionExpiry();
 }
 
 function showToast(message) {
@@ -1542,6 +1572,10 @@ async function loadData() {
     state.currentUser = currentUser;
     if (currentUser?.csrf_token) {
       sessionStorage.setItem("IAM_CSRF_TOKEN", currentUser.csrf_token);
+    }
+    if (currentUser?.session_expires_at) {
+      sessionStorage.setItem("IAM_SESSION_EXPIRES_AT", String(currentUser.session_expires_at));
+      scheduleSessionExpiry(currentUser.session_expires_at);
     }
     state.selectedIdentityId = identities[0]?.id || null;
     state.selectedOperatorId = operators[0]?.identity_id || null;

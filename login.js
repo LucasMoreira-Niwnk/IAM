@@ -46,6 +46,9 @@ document.querySelector("#login-form").addEventListener("submit", async (event) =
     if (result.user?.csrf_token) {
       sessionStorage.setItem("IAM_CSRF_TOKEN", result.user.csrf_token);
     }
+    if (result.user?.session_expires_at) {
+      sessionStorage.setItem("IAM_SESSION_EXPIRES_AT", String(result.user.session_expires_at));
+    }
     window.location.href = "/inicio";
   } catch (error) {
     showToast(error.message);
