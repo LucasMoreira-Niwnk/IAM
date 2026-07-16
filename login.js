@@ -42,7 +42,10 @@ document.querySelector("#login-form").addEventListener("submit", async (event) =
   submitButton.textContent = "Entrando...";
 
   try {
-    await loginWithLdap(username, password);
+    const result = await loginWithLdap(username, password);
+    if (result.user?.csrf_token) {
+      sessionStorage.setItem("IAM_CSRF_TOKEN", result.user.csrf_token);
+    }
     window.location.href = "/inicio";
   } catch (error) {
     showToast(error.message);

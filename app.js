@@ -106,11 +106,15 @@ async function apiGet(path) {
 }
 
 async function apiPost(path, payload = null) {
+  const csrfToken = sessionStorage.getItem("IAM_CSRF_TOKEN");
   const options = {
     method: "POST",
     credentials: "include",
     headers: { Accept: "application/json" },
   };
+  if (csrfToken) {
+    options.headers["X-CSRF-Token"] = csrfToken;
+  }
   if (payload !== null) {
     options.headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(payload);
@@ -148,6 +152,7 @@ async function logout(reason = "manual") {
     // O backend atual ainda pode não ter autenticação. Mesmo assim, limpamos o estado local.
   }
 
+  sessionStorage.removeItem("IAM_CSRF_TOKEN");
   if (reason === "timeout") {
     sessionStorage.setItem("IAM_LOGOUT_REASON", "Sua sessão expirou por inatividade.");
   }
@@ -1385,6 +1390,9 @@ async function loadData() {
     state.syncRuns = syncRuns;
     state.auditEvents = auditEvents;
     state.currentUser = currentUser;
+    if (currentUser?.csrf_token) {
+      sessionStorage.setItem("IAM_CSRF_TOKEN", currentUser.csrf_token);
+    }
     state.selectedIdentityId = identities[0]?.id || null;
     state.selectedOperatorId = operators[0]?.identity_id || null;
     state.apiOnline = true;

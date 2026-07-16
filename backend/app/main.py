@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
 from datetime import datetime, timezone
 
@@ -34,6 +35,7 @@ VIEWONLY_PERMISSIONS = {
     "viewIdentities": True,
     "viewAudit": True,
 }
+CSRF_HEADER_NAME = "x-csrf-token"
 
 app = FastAPI(title=settings.app_name)
 
@@ -118,6 +120,7 @@ def create_session_token(user: dict) -> str:
         "email": user.get("email"),
         "upn": user.get("upn"),
         "access_level": user.get("access_level"),
+        "csrf_token": user.get("csrf_token") or secrets.token_urlsafe(32),
         "exp": int(time.time()) + settings.session_ttl_seconds,
     }
     payload_raw = _b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
@@ -176,6 +179,15 @@ def session_from_request(request: Request) -> dict:
     if not session:
         raise HTTPException(status_code=401, detail="Sessão inválida ou expirada.")
     return session
+
+
+def require_csrf(request: Request, session: dict) -> None:
+    if request.method.upper() in {"GET", "HEAD", "OPTIONS"}:
+        return
+    expected_token = session.get("csrf_token")
+    received_token = request.headers.get(CSRF_HEADER_NAME)
+    if not expected_token or not received_token or not hmac.compare_digest(expected_token, received_token):
+        raise HTTPException(status_code=403, detail="Token CSRF inválido ou ausente.")
 
 
 def find_operator_for_session(connection, session: dict) -> dict | None:
@@ -287,6 +299,7 @@ def operator_response(session: dict, operator: dict | None = None) -> dict:
 
 def require_permission(connection, request: Request, permission: str) -> dict:
     session = session_from_request(request)
+    require_csrf(request, session)
     operator = find_operator_for_session(connection, session)
     if operator:
         operator = enrich_operator(connection, operator)
@@ -370,6 +383,7 @@ def ldap_login(payload: LdapLoginRequest, response: Response) -> dict:
         "upn": user.upn,
         "distinguished_name": user.distinguished_name,
         "access_level": user.access_level,
+        "csrf_token": secrets.token_urlsafe(32),
     }
     token = create_session_token(user_payload)
     response.set_cookie(
