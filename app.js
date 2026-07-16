@@ -9,6 +9,7 @@ const state = {
   groups: [],
   operators: [],
   critical: { users_count: 0, groups_count: 0, users: [], groups: [] },
+  governance: { workspace_disabled_members: { groups: [], total: 0, by_group: {}, users: [] } },
   syncRuns: [],
   auditEvents: [],
   currentUser: null,
@@ -561,6 +562,31 @@ function renderDirectoryIndicators() {
         )
         .join("")
     : `<div class="empty-state">Nenhuma alteração de operador registrada.</div>`;
+}
+
+function renderWorkspaceGovernance() {
+  const data = state.governance.workspace_disabled_members || { total: 0, users: [] };
+  const users = data.users || [];
+  document.querySelector("#workspace-disabled-count").textContent = `${data.total || users.length} alerta(s)`;
+  document.querySelector("#workspace-disabled-list").innerHTML = users.length
+    ? users
+        .slice(0, 8)
+        .map(
+          (identity) => `
+            <article class="governance-item" data-governance-identity="${identity.id}">
+              <div>
+                <strong>${identityName(identity)}</strong>
+                <span>${identity.username || identity.email || "-"}</span>
+              </div>
+              <div>
+                <span class="badge disabled">Desabilitado</span>
+                <small>${identity.group_name}</small>
+              </div>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhum usuário desabilitado nos grupos GW-Business Standard ou GW-Enterprise Starter.</div>`;
 }
 
 function dashboardNotifications() {
@@ -1407,6 +1433,7 @@ function renderAll() {
   renderSidebarSyncStatus();
   renderReviews();
   renderDirectoryIndicators();
+  renderWorkspaceGovernance();
   renderNotifications();
   renderIdentities();
   renderAccess();
@@ -1421,11 +1448,12 @@ function renderAll() {
 async function loadData() {
   state.loading = true;
   try {
-    const [identities, groups, operators, critical, syncRuns, auditEvents, currentUser] = await Promise.all([
+    const [identities, groups, operators, critical, governanceWorkspace, syncRuns, auditEvents, currentUser] = await Promise.all([
       apiGet("/api/identities"),
       apiGet("/api/groups"),
       apiGet("/api/operators"),
       apiGet("/api/critical-permissions"),
+      apiGet("/api/governance/workspace-disabled-members"),
       apiGet("/api/sync-runs"),
       apiGet("/api/audit-events"),
       apiGetOptional("/api/auth/me"),
@@ -1435,6 +1463,7 @@ async function loadData() {
     state.groups = groups;
     state.operators = operators;
     state.critical = critical;
+    state.governance.workspace_disabled_members = governanceWorkspace;
     state.syncRuns = syncRuns;
     state.auditEvents = auditEvents;
     state.currentUser = currentUser;
@@ -2125,6 +2154,11 @@ function bindEvents() {
   document.querySelector("#risk-bars").addEventListener("click", (event) => {
     const riskUser = event.target.closest("[data-dashboard-identity]");
     if (riskUser?.dataset.dashboardIdentity) openIdentityDetail(riskUser.dataset.dashboardIdentity);
+  });
+
+  document.querySelector("#workspace-disabled-list").addEventListener("click", (event) => {
+    const governanceUser = event.target.closest("[data-governance-identity]");
+    if (governanceUser?.dataset.governanceIdentity) openIdentityDetail(governanceUser.dataset.governanceIdentity);
   });
 
   document.querySelector("#notification-button").addEventListener("click", () => {

@@ -643,6 +643,7 @@ button:disabled {
 
 .review-list,
 .risk-bars,
+.governance-list,
 .access-grid,
 .audit-feed {
   display: grid;
@@ -651,6 +652,7 @@ button:disabled {
 
 .review-item,
 .risk-row,
+.governance-item,
 .access-card,
 .audit-feed li {
   padding: 12px;
@@ -664,6 +666,41 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
+}
+
+.governance-module {
+  grid-column: 1 / -1;
+}
+
+.governance-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.governance-item:hover {
+  border-color: var(--line);
+  background: #f6f9ff;
+}
+
+.governance-item strong,
+.governance-item span,
+.governance-item small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.governance-item > div:last-child {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.governance-item small {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .empty-state {

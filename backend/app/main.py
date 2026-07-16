@@ -36,6 +36,7 @@ VIEWONLY_PERMISSIONS = {
     "viewAudit": True,
 }
 CSRF_HEADER_NAME = "x-csrf-token"
+GOVERNANCE_WORKSPACE_GROUPS = ("GW-Business Standard", "GW-Enterprise Starter")
 
 app = FastAPI(title=settings.app_name)
 
@@ -1066,6 +1067,45 @@ def critical_permissions() -> dict:
             "groups_count": len(groups),
             "users": users,
             "groups": groups,
+        }
+
+
+@app.get("/api/governance/workspace-disabled-members")
+def workspace_disabled_members() -> dict:
+    with db() as connection:
+        placeholders = ",".join("?" for _ in GOVERNANCE_WORKSPACE_GROUPS)
+        rows = rows_to_dicts(
+            connection.execute(
+                f"""
+                SELECT
+                    i.id,
+                    i.username,
+                    i.display_name,
+                    i.email,
+                    i.department,
+                    i.status,
+                    i.distinguished_name,
+                    ig.group_name,
+                    ig.group_dn
+                FROM identities i
+                INNER JOIN identity_groups ig ON ig.identity_id = i.id
+                WHERE lower(i.status) = 'disabled'
+                  AND lower(ig.group_name) IN ({placeholders})
+                ORDER BY ig.group_name COLLATE NOCASE, i.display_name COLLATE NOCASE, i.username COLLATE NOCASE
+                """,
+                tuple(group.lower() for group in GOVERNANCE_WORKSPACE_GROUPS),
+            ).fetchall(),
+        )
+        groups = {}
+        for row in rows:
+            group_name = row["group_name"]
+            groups[group_name] = groups.get(group_name, 0) + 1
+
+        return {
+            "groups": list(GOVERNANCE_WORKSPACE_GROUPS),
+            "total": len(rows),
+            "by_group": groups,
+            "users": rows,
         }
 
 
