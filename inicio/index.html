@@ -250,6 +250,37 @@
             <div class="pagination" id="group-pagination" aria-label="Paginação de grupos do AD"></div>
           </div>
 
+          <div class="content-panel is-hidden" id="view-group-detail" data-panel="group-detail">
+            <div class="detail-toolbar">
+              <button class="ghost-button" type="button" data-view-link="access">Voltar para grupos</button>
+              <div class="detail-actions">
+                <button class="primary-button" type="button" data-group-member-action="add">Adicionar usuário</button>
+              </div>
+            </div>
+
+            <section class="identity-hero group-hero" id="group-hero"></section>
+
+            <div class="detail-module">
+              <div class="module-header">
+                <h3>Membros do grupo</h3>
+                <label class="search compact-search">
+                  <span aria-hidden="true">S</span>
+                  <input id="group-member-search" type="search" placeholder="Buscar usuário para adicionar" />
+                </label>
+              </div>
+              <div class="group-member-layout">
+                <div>
+                  <h4>Usuários atuais</h4>
+                  <div class="group-member-list" id="group-member-list"></div>
+                </div>
+                <div>
+                  <h4>Adicionar ao grupo</h4>
+                  <div class="group-candidate-list" id="group-candidate-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="content-panel is-hidden" id="view-critical" data-panel="critical">
             <div class="section-heading">
               <div>

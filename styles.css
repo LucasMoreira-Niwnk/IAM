@@ -1108,6 +1108,15 @@ td {
   min-width: 0;
 }
 
+.clickable-card {
+  cursor: pointer;
+}
+
+.clickable-card:hover {
+  border-color: var(--blue);
+  box-shadow: 0 10px 26px rgba(26, 37, 54, 0.08);
+}
+
 .access-card strong,
 .access-card span {
   overflow-wrap: anywhere;
@@ -1219,6 +1228,55 @@ td {
 
 .wide-detail {
   grid-column: 1 / -1;
+}
+
+.group-hero {
+  margin-bottom: 16px;
+}
+
+.compact-search {
+  min-width: min(360px, 100%);
+}
+
+.group-member-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.group-member-layout h4 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.group-member-list,
+.group-candidate-list {
+  max-height: 520px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.group-member-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5eaf1;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.group-member-card strong,
+.group-member-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.group-member-card small {
+  color: var(--muted);
 }
 
 .info-list {
@@ -1981,6 +2039,7 @@ td {
 
   .form-grid,
   .group-editor,
+  .group-member-layout,
   .provision-form {
     grid-template-columns: 1fr;
   }

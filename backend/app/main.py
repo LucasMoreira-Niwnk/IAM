@@ -7,7 +7,7 @@ import json
 import time
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -712,6 +712,35 @@ def groups() -> list[dict]:
             GROUP BY g.id
             ORDER BY g.is_critical DESC, g.name COLLATE NOCASE
             """,
+        ).fetchall()
+        return rows_to_dicts(rows)
+
+
+@app.get("/api/group-members")
+def group_members(group_dn: str = Query(..., min_length=1)) -> list[dict]:
+    with db() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                i.id,
+                i.username,
+                i.display_name,
+                i.email,
+                i.upn,
+                i.department,
+                i.title,
+                i.status,
+                i.distinguished_name,
+                ig.group_name,
+                ig.group_dn,
+                ig.is_critical,
+                ig.synced_at
+            FROM identity_groups ig
+            INNER JOIN identities i ON i.id = ig.identity_id
+            WHERE lower(ig.group_dn) = lower(?)
+            ORDER BY i.display_name COLLATE NOCASE, i.username COLLATE NOCASE
+            """,
+            (group_dn,),
         ).fetchall()
         return rows_to_dicts(rows)
 

@@ -13,6 +13,9 @@ const state = {
   currentUser: null,
   selectedIdentityId: null,
   selectedIdentityGroups: [],
+  selectedGroupDn: null,
+  selectedGroupMembers: [],
+  groupMemberSearch: "",
   selectedOperatorId: null,
   activeFilter: "all",
   identityPage: 1,
@@ -735,7 +738,7 @@ function renderAccess() {
   document.querySelector("#access-grid").innerHTML = visibleGroups
     .map(
       (group) => `
-        <article class="access-card">
+        <article class="access-card clickable-card" data-group-open="${encodeURIComponent(group.distinguished_name)}">
           <div>
             <strong>${group.name}</strong>
             <span>${group.description || "Sem descrição"}</span>
@@ -760,6 +763,108 @@ function renderAccess() {
       <button class="ghost-button" type="button" data-group-page-action="next" ${state.groupPage === totalPages ? "disabled" : ""}>Próxima</button>
     </div>
   `;
+}
+
+function selectedGroup() {
+  return state.groups.find((group) => group.distinguished_name === state.selectedGroupDn) || null;
+}
+
+function groupMemberIds() {
+  return new Set(state.selectedGroupMembers.map((member) => member.id));
+}
+
+function renderGroupDetail() {
+  const group = selectedGroup();
+  if (!group) {
+    renderEmpty("#group-member-list", "Selecione um grupo para visualizar os membros.");
+    renderEmpty("#group-candidate-list", "");
+    return;
+  }
+
+  document.querySelector("#group-hero").innerHTML = `
+    <div class="identity-avatar">G</div>
+    <div>
+      <p class="eyebrow">Active Directory</p>
+      <h2>${group.name}</h2>
+      <span>${group.description || "Sem descrição"} - ${group.member_count || 0} membro(s)</span>
+      <span>${group.distinguished_name}</span>
+    </div>
+    <div class="identity-badges">
+      <span class="badge ${group.is_critical ? "high" : "low"}">${group.is_critical ? "Crítico" : "Padrão"}</span>
+    </div>
+  `;
+
+  document.querySelector("#group-member-list").innerHTML = state.selectedGroupMembers.length
+    ? state.selectedGroupMembers
+        .map(
+          (member) => `
+            <article class="group-member-card">
+              <span class="avatar">${initials(identityName(member))}</span>
+              <div>
+                <strong>${identityName(member)}</strong>
+                <small>${member.username || identityEmail(member) || "-"}</small>
+              </div>
+              <button class="text-button danger-text" type="button" data-group-member-remove="${member.id}">Remover</button>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhum membro retornado pelo último sync.</div>`;
+
+  renderGroupCandidates();
+}
+
+function renderGroupCandidates() {
+  const group = selectedGroup();
+  if (!group) return;
+
+  const searchTerm = state.groupMemberSearch.trim().toLowerCase();
+  const currentMembers = groupMemberIds();
+  const candidates = state.identities
+    .filter((identity) => !currentMembers.has(identity.id))
+    .filter((identity) => {
+      if (!searchTerm) return true;
+      return [identityName(identity), identityEmail(identity), identity.username, identity.department]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(searchTerm);
+    })
+    .slice(0, 20);
+
+  document.querySelector("#group-candidate-list").innerHTML = candidates.length
+    ? candidates
+        .map(
+          (identity) => `
+            <article class="group-member-card">
+              <span class="avatar">${initials(identityName(identity))}</span>
+              <div>
+                <strong>${identityName(identity)}</strong>
+                <small>${identity.username || identityEmail(identity) || "-"}</small>
+              </div>
+              <button class="text-button" type="button" data-group-member-add="${identity.id}">Adicionar</button>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhum usuário disponível para a busca atual.</div>`;
+}
+
+async function openGroupDetail(groupDn) {
+  state.selectedGroupDn = groupDn;
+  state.groupMemberSearch = "";
+  document.querySelector("#group-member-search").value = "";
+  await refreshSelectedGroupMembers();
+  switchView("group-detail");
+}
+
+async function refreshSelectedGroupMembers() {
+  if (!state.selectedGroupDn) return;
+  state.selectedGroupMembers = await apiGet(`/api/group-members?group_dn=${encodeURIComponent(state.selectedGroupDn)}`);
+  const group = selectedGroup();
+  if (group) group.member_count = state.selectedGroupMembers.length;
+  renderGroupDetail();
+  applyPermissionState();
 }
 
 function renderGlobalSearchResults() {
@@ -809,7 +914,7 @@ function renderGlobalSearchResults() {
             ${matchedGroups
               .map(
                 (group) => `
-                  <button type="button" data-search-group="${encodeURIComponent(group.name)}">
+                  <button type="button" data-search-group="${encodeURIComponent(group.distinguished_name)}">
                     <span class="avatar">G</span>
                     <span>
                       <b>${group.name}</b>
@@ -977,6 +1082,7 @@ function applyPermissionState() {
   disableByPermission("[data-action='map-app']", "manageGroups");
   disableByPermission("[data-identity-action='password']", "resetPassword");
   disableByPermission("[data-identity-action='add-group'], [data-identity-action='revoke']", "manageGroups");
+  disableByPermission("[data-group-member-action], [data-group-member-add], [data-group-member-remove]", "manageGroups");
   disableByPermission("[data-identity-action='block'], [data-identity-action='unlock'], [data-identity-action='disable'], [data-identity-action='sessions']", "lockUnlock");
   disableByPermission("[data-view='operators'], [data-operator-action], #permission-grid input", "manageOperators");
   disableByPermission("[data-action='export-audit']", "viewAudit");
@@ -991,6 +1097,7 @@ function renderAll() {
   renderNotifications();
   renderIdentities();
   renderAccess();
+  renderGroupDetail();
   renderGlobalSearchResults();
   renderCriticalPermissions();
   renderOperators();
@@ -1036,7 +1143,7 @@ function switchView(viewName) {
     panel.classList.toggle("is-hidden", panel.dataset.panel !== viewName);
   });
   document.querySelectorAll(".nav-item").forEach((item) => {
-    const activeView = viewName === "identity-detail" ? "identities" : viewName;
+    const activeView = viewName === "identity-detail" ? "identities" : viewName === "group-detail" ? "access" : viewName;
     item.classList.toggle("is-active", item.dataset.view === activeView);
   });
 }
@@ -1426,6 +1533,25 @@ async function changeIdentityGroup(action, groupDn, groupName, isCritical = fals
   }
 }
 
+async function changeGroupDetailMembership(action, identityId) {
+  const group = selectedGroup();
+  const identity = state.identities.find((item) => item.id === identityId);
+  if (!group || !identity) return;
+
+  try {
+    await apiPost(`/api/identities/${identity.id}/groups/${action}`, {
+      group_dn: group.distinguished_name,
+      group_name: group.name,
+      is_critical: Boolean(group.is_critical),
+    });
+    await refreshSelectedGroupMembers();
+    await refreshAudit();
+    showToast(action === "add" ? "Usuário adicionado ao grupo no AD." : "Usuário removido do grupo no AD.");
+  } catch (error) {
+    showToast(`Falha ao alterar membros do grupo: ${error.message}`);
+  }
+}
+
 async function removeSelectedOperator() {
   const operator = selectedOperator();
   if (!operator) return;
@@ -1489,11 +1615,8 @@ function bindEvents() {
     }
 
     if (groupButton) {
-      document.querySelector("#global-search").value = decodeURIComponent(groupButton.dataset.searchGroup);
-      state.groupPage = 1;
-      renderAccess();
       document.querySelector("#global-search-results").classList.remove("is-visible");
-      switchView("access");
+      openGroupDetail(decodeURIComponent(groupButton.dataset.searchGroup));
     }
   });
 
@@ -1527,6 +1650,34 @@ function bindEvents() {
       state.groupPage += 1;
     }
     renderAccess();
+  });
+
+  document.querySelector("#access-grid").addEventListener("click", (event) => {
+    const card = event.target.closest("[data-group-open]");
+    if (!card) return;
+    openGroupDetail(decodeURIComponent(card.dataset.groupOpen));
+  });
+
+  document.querySelector("#group-member-search").addEventListener("input", (event) => {
+    state.groupMemberSearch = event.target.value;
+    renderGroupCandidates();
+    applyPermissionState();
+  });
+
+  document.querySelector("#group-member-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-group-member-remove]");
+    if (!button) return;
+    changeGroupDetailMembership("remove", button.dataset.groupMemberRemove);
+  });
+
+  document.querySelector("#group-candidate-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-group-member-add]");
+    if (!button) return;
+    changeGroupDetailMembership("add", button.dataset.groupMemberAdd);
+  });
+
+  document.querySelector("[data-group-member-action='add']").addEventListener("click", () => {
+    document.querySelector("#group-member-search").focus();
   });
 
   document.querySelector("#identity-table").addEventListener("click", (event) => {
