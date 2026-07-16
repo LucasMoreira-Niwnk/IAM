@@ -485,6 +485,19 @@ def create_identity(payload: CreateUserRequest, request: Request) -> dict:
                 phone, location, distinguished_name, status, user_account_control,
                 pwd_last_set, last_logon_timestamp, synced_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                username = excluded.username,
+                display_name = excluded.display_name,
+                email = excluded.email,
+                upn = excluded.upn,
+                title = excluded.title,
+                department = excluded.department,
+                distinguished_name = excluded.distinguished_name,
+                status = excluded.status,
+                user_account_control = excluded.user_account_control,
+                pwd_last_set = excluded.pwd_last_set,
+                last_logon_timestamp = excluded.last_logon_timestamp,
+                synced_at = excluded.synced_at
             """,
             (
                 identity_id,
