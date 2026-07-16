@@ -1148,6 +1148,24 @@ function reportRows(events) {
     .join("");
 }
 
+function openHtmlReport(html, filename) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const report = window.open(url, "_blank");
+  if (!report) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    showToast("O navegador bloqueou a abertura. O relatório foi baixado como HTML.");
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    return;
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 function exportAuditReport() {
   const events = filteredAuditEvents();
   const successCount = events.filter((event) => event.status === "success").length;
@@ -1214,13 +1232,108 @@ function exportAuditReport() {
     </html>
   `;
 
-  const report = window.open("", "_blank", "noopener,noreferrer");
-  if (!report) {
-    showToast("O navegador bloqueou a abertura do relatório.");
-    return;
-  }
-  report.document.write(html);
-  report.document.close();
+  openHtmlReport(html, "relatorio-auditoria-iam.html");
+}
+
+function criticalReportRows() {
+  return (state.critical.users || [])
+    .map(
+      (identity) => `
+        <tr>
+          <td>${escapeHtml(identity.display_name || identity.username || "-")}</td>
+          <td>${escapeHtml(identity.username || "-")}</td>
+          <td>${escapeHtml(identity.department || "-")}</td>
+          <td>${escapeHtml(statusLabel(identity.status))}</td>
+          <td>${escapeHtml(String(identity.critical_groups || ""))}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function criticalGroupReportRows() {
+  return (state.critical.groups || [])
+    .map(
+      (group) => `
+        <tr>
+          <td>${escapeHtml(group.group_name || "-")}</td>
+          <td>${escapeHtml(group.member_count || 0)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function exportCriticalReport() {
+  const generatedAt = formatSyncTime(new Date().toISOString());
+  const disabledCount = (state.critical.users || []).filter(
+    (identity) => identity.status === "disabled" || identity.status === "blocked",
+  ).length;
+
+  const html = `
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <title>Relatório de permissões críticas</title>
+        <style>
+          body { margin: 0; padding: 32px; color: #101827; font-family: Arial, sans-serif; background: #f4f7fb; }
+          .report { max-width: 1180px; margin: 0 auto; padding: 28px; border: 1px solid #d9e2ef; border-radius: 10px; background: #fff; }
+          header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #16202b; padding-bottom: 18px; }
+          h1 { margin: 0 0 6px; font-size: 28px; }
+          h2 { margin: 26px 0 12px; font-size: 18px; }
+          p { margin: 4px 0; color: #546179; }
+          .actions { text-align: right; }
+          button { min-height: 38px; padding: 0 16px; border: 0; border-radius: 8px; color: white; background: #16202b; font-weight: 700; cursor: pointer; }
+          .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 22px 0; }
+          .summary article { padding: 14px; border: 1px solid #d9e2ef; border-radius: 8px; background: #fbfdff; }
+          .summary span { display: block; color: #546179; font-size: 13px; }
+          .summary strong { display: block; margin-top: 8px; font-size: 24px; }
+          table { width: 100%; border-collapse: collapse; font-size: 13px; }
+          th, td { padding: 10px; border-bottom: 1px solid #d9e2ef; text-align: left; vertical-align: top; }
+          th { color: #16202b; background: #eef3f8; }
+          @media print { body { padding: 0; background: #fff; } .report { border: 0; } .actions { display: none; } }
+        </style>
+      </head>
+      <body>
+        <main class="report">
+          <header>
+            <div>
+              <p>Casa & Terra IAM</p>
+              <h1>Relatório de permissões críticas</h1>
+              <p>Gerado em ${escapeHtml(generatedAt)}</p>
+            </div>
+            <div class="actions"><button onclick="window.print()">Imprimir / salvar PDF</button></div>
+          </header>
+          <section class="summary">
+            <article><span>Usuários com permissão crítica</span><strong>${state.critical.users_count || 0}</strong></article>
+            <article><span>Grupos críticos mapeados</span><strong>${state.critical.groups_count || 0}</strong></article>
+            <article><span>Contas desabilitadas/bloqueadas</span><strong>${disabledCount}</strong></article>
+          </section>
+          <h2>Distribuição por grupo crítico</h2>
+          <table>
+            <thead><tr><th>Grupo</th><th>Membros</th></tr></thead>
+            <tbody>${criticalGroupReportRows() || `<tr><td colspan="2">Nenhum grupo crítico encontrado.</td></tr>`}</tbody>
+          </table>
+          <h2>Usuários com permissões críticas</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Login</th>
+                <th>Departamento</th>
+                <th>Status</th>
+                <th>Grupos críticos</th>
+              </tr>
+            </thead>
+            <tbody>${criticalReportRows() || `<tr><td colspan="5">Nenhum usuário crítico encontrado.</td></tr>`}</tbody>
+          </table>
+        </main>
+      </body>
+    </html>
+  `;
+
+  openHtmlReport(html, "relatorio-permissoes-criticas.html");
 }
 
 function applyPermissionState() {
@@ -2061,7 +2174,7 @@ function bindEvents() {
       }
 
       if (button.dataset.action === "export-critical") {
-        readonlyNotice("Relatório de permissões críticas");
+        exportCriticalReport();
         return;
       }
 
