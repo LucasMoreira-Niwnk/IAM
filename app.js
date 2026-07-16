@@ -270,6 +270,28 @@ function auditDetails(event) {
   }
 }
 
+function auditEventDescription(event) {
+  const details = auditDetails(event);
+  const operator = event.operator_display_name || event.operator_username || "Sistema";
+  const target = event.target_name || event.target_dn || event.target_type || "-";
+  const parts = [`Operador: ${operator}`, `Objeto: ${target}`];
+
+  if (event.action === "add_group_member" || event.action === "remove_group_member") {
+    parts.push(`Grupo: ${details.group || details.group_name || "Não informado"}`);
+  }
+  if (event.action === "create_user" && details.username) {
+    parts.push(`Usuário criado: ${details.username}`);
+  }
+  if (event.action === "create_group") {
+    parts.push(`Grupo criado: ${target}`);
+  }
+  if (event.action === "sync_ad") {
+    parts.push(`${details.users_synced || 0} usuários, ${details.groups_synced || 0} grupos`);
+  }
+
+  return parts.join(" - ");
+}
+
 function isAdChangeEvent(event) {
   return [
     "create_group",
@@ -1073,22 +1095,17 @@ function renderOperatorDetail() {
 }
 
 function renderAudit() {
-  const filter = state.auditOperatorFilter.trim().toLowerCase();
-  const events = state.auditEvents.filter((event) =>
-    [event.operator_username, event.operator_display_name].filter(Boolean).join(" ").toLowerCase().includes(filter),
-  );
+  const events = filteredAuditEvents();
 
   document.querySelector("#audit-feed").innerHTML = events.length
     ? events
         .map((event) => {
-          const operator = event.operator_display_name || event.operator_username || "Sistema";
-          const target = event.target_name || event.target_dn || event.target_type || "-";
           return `
             <li>
               <span class="audit-time">${formatSyncTime(event.occurred_at)}</span>
               <div>
                 <strong>${auditActionLabel(event.action)}</strong>
-                <small>${operator} - ${target}</small>
+                <small>${auditEventDescription(event)}</small>
               </div>
               <span class="badge sync-status ${statusClass(event.status)}">${statusLabel(event.status)}</span>
             </li>
@@ -1096,6 +1113,114 @@ function renderAudit() {
         })
         .join("")
     : `<li><span class="audit-time">-</span><strong>Nenhum evento encontrado</strong><span class="badge review">Pendente</span></li>`;
+}
+
+function filteredAuditEvents() {
+  const filter = state.auditOperatorFilter.trim().toLowerCase();
+  return state.auditEvents.filter((event) =>
+    [event.operator_username, event.operator_display_name].filter(Boolean).join(" ").toLowerCase().includes(filter),
+  );
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function reportRows(events) {
+  return events
+    .map(
+      (event) => `
+        <tr>
+          <td>${escapeHtml(formatSyncTime(event.occurred_at))}</td>
+          <td>${escapeHtml(auditActionLabel(event.action))}</td>
+          <td>${escapeHtml(event.operator_display_name || event.operator_username || "Sistema")}</td>
+          <td>${escapeHtml(event.target_name || event.target_dn || event.target_type || "-")}</td>
+          <td>${escapeHtml(auditEventDescription(event))}</td>
+          <td>${escapeHtml(statusLabel(event.status))}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function exportAuditReport() {
+  const events = filteredAuditEvents();
+  const successCount = events.filter((event) => event.status === "success").length;
+  const failureCount = events.length - successCount;
+  const operatorCount = new Set(events.map((event) => event.operator_username || event.operator_display_name).filter(Boolean)).size;
+  const generatedAt = formatSyncTime(new Date().toISOString());
+  const filter = state.auditOperatorFilter.trim();
+
+  const html = `
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <title>Relatório de auditoria IAM</title>
+        <style>
+          body { margin: 0; padding: 32px; color: #101827; font-family: Arial, sans-serif; background: #f4f7fb; }
+          .report { max-width: 1180px; margin: 0 auto; padding: 28px; border: 1px solid #d9e2ef; border-radius: 10px; background: #fff; }
+          header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #16202b; padding-bottom: 18px; }
+          h1 { margin: 0 0 6px; font-size: 28px; }
+          p { margin: 4px 0; color: #546179; }
+          .actions { text-align: right; }
+          button { min-height: 38px; padding: 0 16px; border: 0; border-radius: 8px; color: white; background: #16202b; font-weight: 700; cursor: pointer; }
+          .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 22px 0; }
+          .summary article { padding: 14px; border: 1px solid #d9e2ef; border-radius: 8px; background: #fbfdff; }
+          .summary span { display: block; color: #546179; font-size: 13px; }
+          .summary strong { display: block; margin-top: 8px; font-size: 24px; }
+          table { width: 100%; border-collapse: collapse; font-size: 13px; }
+          th, td { padding: 10px; border-bottom: 1px solid #d9e2ef; text-align: left; vertical-align: top; }
+          th { color: #16202b; background: #eef3f8; }
+          @media print { body { padding: 0; background: #fff; } .report { border: 0; } .actions { display: none; } }
+        </style>
+      </head>
+      <body>
+        <main class="report">
+          <header>
+            <div>
+              <p>Casa & Terra IAM</p>
+              <h1>Relatório de auditoria</h1>
+              <p>Gerado em ${escapeHtml(generatedAt)}${filter ? ` - Filtro de operador: ${escapeHtml(filter)}` : ""}</p>
+            </div>
+            <div class="actions"><button onclick="window.print()">Imprimir / salvar PDF</button></div>
+          </header>
+          <section class="summary">
+            <article><span>Total de eventos</span><strong>${events.length}</strong></article>
+            <article><span>Eventos com sucesso</span><strong>${successCount}</strong></article>
+            <article><span>Eventos com falha</span><strong>${failureCount}</strong></article>
+            <article><span>Operadores envolvidos</span><strong>${operatorCount}</strong></article>
+          </section>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Ação</th>
+                <th>Operador</th>
+                <th>Objeto</th>
+                <th>Detalhes</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${reportRows(events) || `<tr><td colspan="6">Nenhum evento encontrado.</td></tr>`}</tbody>
+          </table>
+        </main>
+      </body>
+    </html>
+  `;
+
+  const report = window.open("", "_blank", "noopener,noreferrer");
+  if (!report) {
+    showToast("O navegador bloqueou a abertura do relatório.");
+    return;
+  }
+  report.document.write(html);
+  report.document.close();
 }
 
 function applyPermissionState() {
@@ -1930,8 +2055,13 @@ function bindEvents() {
         return;
       }
 
-      if (button.dataset.action === "export-audit" || button.dataset.action === "export-critical") {
-        readonlyNotice("Exportação");
+      if (button.dataset.action === "export-audit") {
+        exportAuditReport();
+        return;
+      }
+
+      if (button.dataset.action === "export-critical") {
+        readonlyNotice("Relatório de permissões críticas");
         return;
       }
 
