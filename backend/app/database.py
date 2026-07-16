@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS identities (
     distinguished_name TEXT NOT NULL,
     status TEXT NOT NULL,
     user_account_control INTEGER,
+    computed_user_account_control INTEGER,
     pwd_last_set TEXT,
     last_logon_timestamp TEXT,
     lockout_time TEXT,
@@ -105,6 +106,8 @@ def init_db(connection: sqlite3.Connection) -> None:
     }
     if "lockout_time" not in identity_columns:
         connection.execute("ALTER TABLE identities ADD COLUMN lockout_time TEXT")
+    if "computed_user_account_control" not in identity_columns:
+        connection.execute("ALTER TABLE identities ADD COLUMN computed_user_account_control INTEGER")
     connection.commit()
 
 

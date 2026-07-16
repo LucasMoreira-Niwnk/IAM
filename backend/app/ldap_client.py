@@ -27,6 +27,7 @@ USER_ATTRIBUTES = [
     "pwdLastSet",
     "lastLogonTimestamp",
     "lockoutTime",
+    "msDS-User-Account-Control-Computed",
     "memberOf",
 ]
 

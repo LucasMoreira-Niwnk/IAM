@@ -852,7 +852,14 @@ function identityMatchesSearch(identity, searchTerm) {
 }
 
 function isAdLocked(identity) {
-  return Number(identity.lockout_time || 0) > 0 || identity.status === "blocked";
+  const computedUac = Number(identity.computed_user_account_control || 0);
+  const lockoutTime = String(identity.lockout_time || "").trim();
+  const lockoutTimeIsSet =
+    Boolean(lockoutTime) &&
+    lockoutTime !== "0" &&
+    lockoutTime !== "-" &&
+    !lockoutTime.startsWith("1601-01-01");
+  return Boolean(computedUac & 16) || lockoutTimeIsSet || identity.status === "blocked";
 }
 
 async function renderIdentityDetail(identityId) {
@@ -912,6 +919,10 @@ async function renderIdentityDetail(identityId) {
     <article>
       <span>lockoutTime</span>
       <strong>${identity.lockout_time || "0"}</strong>
+    </article>
+    <article>
+      <span>Controle computado</span>
+      <strong>${identity.computed_user_account_control || "0"}</strong>
     </article>
     <article>
       <span>pwdLastSet</span>

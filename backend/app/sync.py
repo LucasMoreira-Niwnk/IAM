@@ -12,6 +12,7 @@ from .ldap_client import ReadOnlyLdapClient
 
 
 ACCOUNT_DISABLED_FLAG = 0x0002
+ACCOUNT_LOCKED_FLAG = 0x0010
 PERMISSION_KEYS = (
     "viewIdentities",
     "resetPassword",
@@ -71,8 +72,23 @@ def is_account_disabled(user_account_control: Any) -> bool:
 
 
 def is_account_locked(lockout_time: Any) -> bool:
+    value = first(lockout_time)
+    if not value:
+        return False
+    if isinstance(value, datetime):
+        return value.year > 1601
+    value_text = str(value)
+    if value_text.startswith("1601-01-01"):
+        return False
     try:
-        return int(first(lockout_time) or 0) > 0
+        return int(value_text) > 0
+    except (TypeError, ValueError):
+        return bool(value_text and value_text not in {"0", "None"})
+
+
+def is_account_computed_locked(computed_uac: Any) -> bool:
+    try:
+        return bool(int(first(computed_uac) or 0) & ACCOUNT_LOCKED_FLAG)
     except (TypeError, ValueError):
         return False
 
@@ -190,9 +206,10 @@ class DirectorySyncService:
                 dn = str(first(user.get("distinguishedName")) or "")
                 uac = first(user.get("userAccountControl"))
                 lockout_time = first(user.get("lockoutTime"))
+                computed_uac = first(user.get("msDS-User-Account-Control-Computed"))
                 if is_account_disabled(uac):
                     status = "disabled"
-                elif is_account_locked(lockout_time):
+                elif is_account_computed_locked(computed_uac) or is_account_locked(lockout_time):
                     status = "blocked"
                 else:
                     status = "active"
@@ -203,8 +220,8 @@ class DirectorySyncService:
                     INSERT INTO identities (
                         id, username, display_name, email, upn, title, department, manager_dn,
                         phone, location, distinguished_name, status, user_account_control,
-                        pwd_last_set, last_logon_timestamp, lockout_time, synced_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        computed_user_account_control, pwd_last_set, last_logon_timestamp, lockout_time, synced_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         username = excluded.username,
                         display_name = excluded.display_name,
@@ -218,6 +235,7 @@ class DirectorySyncService:
                         distinguished_name = excluded.distinguished_name,
                         status = excluded.status,
                         user_account_control = excluded.user_account_control,
+                        computed_user_account_control = excluded.computed_user_account_control,
                         pwd_last_set = excluded.pwd_last_set,
                         last_logon_timestamp = excluded.last_logon_timestamp,
                         lockout_time = excluded.lockout_time,
@@ -237,6 +255,7 @@ class DirectorySyncService:
                         dn,
                         status,
                         int(uac or 0),
+                        int(computed_uac or 0),
                         str(first(user.get("pwdLastSet")) or ""),
                         str(first(user.get("lastLogonTimestamp")) or ""),
                         str(lockout_time or ""),
