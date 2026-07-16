@@ -245,6 +245,44 @@ function auditActionLabel(action) {
   return labels[action] || action || "Evento";
 }
 
+function auditDetails(event) {
+  if (!event?.details_json) return {};
+  try {
+    return JSON.parse(event.details_json);
+  } catch {
+    return {};
+  }
+}
+
+function isAdChangeEvent(event) {
+  return [
+    "create_group",
+    "create_user",
+    "reset_password",
+    "unlock_identity",
+    "block_identity",
+    "disable_identity",
+    "enable_identity",
+    "add_group_member",
+    "remove_group_member",
+  ].includes(event?.action);
+}
+
+function criticalGroupNames() {
+  return new Set(
+    state.groups
+      .filter((group) => Number(group.is_critical) === 1)
+      .map((group) => String(group.name || "").toLowerCase()),
+  );
+}
+
+function eventTargetsCriticalGroup(event) {
+  const details = auditDetails(event);
+  const groupName = String(details.group || details.group_name || "").toLowerCase();
+  if (!groupName) return false;
+  return criticalGroupNames().has(groupName);
+}
+
 function currentPermissions() {
   return parsePermissions(state.currentUser?.permissions);
 }
@@ -322,25 +360,30 @@ function renderCurrentUser() {
 
 function renderReviews() {
   const reviewList = document.querySelector("#review-list");
-  const latestRuns = state.syncRuns.slice(0, 4);
+  const latestChanges = state.auditEvents.filter(isAdChangeEvent).slice(0, 6);
 
-  if (!latestRuns.length) {
-    renderEmpty("#review-list", "Nenhuma sincronização registrada ainda.");
+  if (!latestChanges.length) {
+    renderEmpty("#review-list", "Nenhuma alteração registrada ainda.");
     return;
   }
 
-  reviewList.innerHTML = latestRuns
-    .map(
-      (run) => `
+  reviewList.innerHTML = latestChanges
+    .map((event) => {
+      const operator = event.operator_display_name || event.operator_username || "Sistema";
+      const target = event.target_name || event.target_type || "Objeto do AD";
+      const isCritical = event.action === "add_group_member" && eventTargetsCriticalGroup(event);
+      return `
         <article class="review-item">
           <div>
-            <strong>Sincronização ${statusLabel(run.status)}</strong>
-            <span>${formatSyncTime(run.started_at)} - ${run.users_synced || 0} usuários, ${run.groups_synced || 0} grupos</span>
+            <strong>${auditActionLabel(event.action)}</strong>
+            <span>${formatSyncTime(event.occurred_at)} - ${operator} em ${target}</span>
           </div>
-          <span class="badge sync-status ${run.status === "success" ? "success" : "review"}">${run.status}</span>
+          <span class="badge ${isCritical ? "high" : event.status === "success" ? "success" : "review"}">
+            ${isCritical ? "Crítico" : event.status}
+          </span>
         </article>
-      `,
-    )
+      `;
+    })
     .join("");
 }
 
@@ -360,31 +403,123 @@ function renderSidebarSyncStatus() {
 }
 
 function renderDirectoryIndicators() {
-  const blocked = state.identities.filter((identity) => identity.status === "blocked").length;
-  const disabled = state.identities.filter((identity) => identity.status === "disabled").length;
-  const criticalGroups = state.critical.groups_count || 0;
-  const pendingOperators = state.operators.filter((operator) => operator.status === "pending").length;
-  const max = Math.max(state.identities.length, state.groups.length, state.operators.length, 1);
-  const sources = [
-    { label: "Contas bloqueadas", value: Math.round((blocked / max) * 100) },
-    { label: "Contas desabilitadas", value: Math.round((disabled / max) * 100) },
-    { label: "Grupos críticos com membros", value: Math.round((criticalGroups / Math.max(state.groups.length, 1)) * 100) },
-    { label: "Operadores pendentes", value: Math.round((pendingOperators / Math.max(state.operators.length, 1)) * 100) },
-  ];
+  const riskyUsers = [...state.identities]
+    .filter((identity) => Number(identity.critical_group_count || 0) > 0)
+    .sort((a, b) => Number(b.critical_group_count || 0) - Number(a.critical_group_count || 0))
+    .slice(0, 5);
 
-  document.querySelector("#risk-bars").innerHTML = sources
-    .map(
-      (source) => `
-        <article class="risk-row">
-          <div class="risk-meta">
-            <span>${source.label}</span>
-            <span>${source.value}%</span>
-          </div>
-          <div class="bar" aria-hidden="true"><span style="width: ${source.value}%"></span></div>
-        </article>
-      `,
-    )
-    .join("");
+  document.querySelector("#risk-bars").innerHTML = riskyUsers.length
+    ? riskyUsers
+        .map((identity) => {
+          const criticalCount = Number(identity.critical_group_count || 0);
+          const width = Math.min(100, criticalCount * 25);
+          return `
+            <article class="risk-row risk-user" data-dashboard-identity="${identity.id}">
+              <div class="risk-meta">
+                <span>${identityName(identity)}</span>
+                <span>${criticalCount} grupo(s)</span>
+              </div>
+              <small>${identity.username || identityEmail(identity) || "-"}</small>
+              <div class="bar" aria-hidden="true"><span style="width: ${width}%"></span></div>
+            </article>
+          `;
+        })
+        .join("")
+    : `<div class="empty-state">Nenhum usuário em grupo crítico no cache atual.</div>`;
+
+  const operatorStats = state.auditEvents.filter(isAdChangeEvent).reduce((acc, event) => {
+    const key = event.operator_username || event.operator_display_name || "Sistema";
+    if (!acc[key]) {
+      acc[key] = {
+        name: event.operator_display_name || event.operator_username || "Sistema",
+        count: 0,
+      };
+    }
+    acc[key].count += 1;
+    return acc;
+  }, {});
+  const topOperators = Object.values(operatorStats).sort((a, b) => b.count - a.count).slice(0, 5);
+  const maxOperatorChanges = Math.max(...topOperators.map((operator) => operator.count), 1);
+
+  document.querySelector("#operator-ranking").innerHTML = topOperators.length
+    ? topOperators
+        .map(
+          (operator) => `
+            <article class="risk-row">
+              <div class="risk-meta">
+                <span>${operator.name}</span>
+                <span>${operator.count}</span>
+              </div>
+              <small>alterações registradas</small>
+              <div class="bar" aria-hidden="true"><span style="width: ${Math.round((operator.count / maxOperatorChanges) * 100)}%"></span></div>
+            </article>
+          `,
+        )
+        .join("")
+    : `<div class="empty-state">Nenhuma alteração de operador registrada.</div>`;
+}
+
+function dashboardNotifications() {
+  const failedSyncs = state.syncRuns.filter((run) => run.status && run.status !== "success").slice(0, 3);
+  const criticalAdds = state.auditEvents
+    .filter((event) => event.action === "add_group_member" && eventTargetsCriticalGroup(event))
+    .slice(0, 5);
+
+  return [
+    ...failedSyncs.map((run) => ({
+      type: "Falha no sync",
+      title: `Sincronização ${statusLabel(run.status)}`,
+      description: run.error_message || `Execução iniciada em ${formatSyncTime(run.started_at)}`,
+      severity: "high",
+      time: run.finished_at || run.started_at,
+    })),
+    ...criticalAdds.map((event) => {
+      const details = auditDetails(event);
+      return {
+        type: "Grupo crítico",
+        title: event.target_name || "Usuário alterado",
+        description: `Inserido em ${details.group || "grupo crítico"} por ${event.operator_display_name || event.operator_username || "operador"}`,
+        severity: "high",
+        time: event.occurred_at,
+      };
+    }),
+  ].sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
+}
+
+function renderNotifications() {
+  const notifications = dashboardNotifications();
+  const button = document.querySelector("#notification-button");
+  const count = document.querySelector("#notification-count");
+  const panel = document.querySelector("#notification-panel");
+
+  count.textContent = notifications.length;
+  button.classList.toggle("has-notifications", notifications.length > 0);
+  panel.innerHTML = notifications.length
+    ? `
+      <div class="notification-header">
+        <strong>Notificações</strong>
+        <span>${notifications.length} alerta(s)</span>
+      </div>
+      ${notifications
+        .map(
+          (notification) => `
+            <article class="notification-item">
+              <span class="badge ${notification.severity}">${notification.type}</span>
+              <strong>${notification.title}</strong>
+              <small>${notification.description}</small>
+              <small>${formatSyncTime(notification.time)}</small>
+            </article>
+          `,
+        )
+        .join("")}
+    `
+    : `
+      <div class="notification-header">
+        <strong>Notificações</strong>
+        <span>0 alerta</span>
+      </div>
+      <div class="empty-state">Sem alertas de sync ou grupos críticos.</div>
+    `;
 }
 
 function renderIdentities() {
@@ -840,6 +975,7 @@ function renderAll() {
   renderSidebarSyncStatus();
   renderReviews();
   renderDirectoryIndicators();
+  renderNotifications();
   renderIdentities();
   renderAccess();
   renderGlobalSearchResults();
@@ -1112,6 +1248,9 @@ function selectedUserOu() {
 async function refreshAudit() {
   state.auditEvents = await apiGet("/api/audit-events");
   renderAudit();
+  renderReviews();
+  renderDirectoryIndicators();
+  renderNotifications();
 }
 
 async function refreshSelectedIdentity() {
@@ -1393,6 +1532,23 @@ function bindEvents() {
     if (identityId) openIdentityDetail(identityId);
   });
 
+  document.querySelector("#risk-bars").addEventListener("click", (event) => {
+    const riskUser = event.target.closest("[data-dashboard-identity]");
+    if (riskUser?.dataset.dashboardIdentity) openIdentityDetail(riskUser.dataset.dashboardIdentity);
+  });
+
+  document.querySelector("#notification-button").addEventListener("click", () => {
+    document.querySelector("#notification-panel").classList.toggle("is-visible");
+  });
+
+  document.addEventListener("click", (event) => {
+    const panel = document.querySelector("#notification-panel");
+    const button = document.querySelector("#notification-button");
+    if (!panel.contains(event.target) && !button.contains(event.target)) {
+      panel.classList.remove("is-visible");
+    }
+  });
+
   document.querySelector("#operator-list").addEventListener("click", (event) => {
     const operatorButton = event.target.closest("[data-operator-id]");
     if (!operatorButton) return;
@@ -1559,6 +1715,7 @@ function bindEvents() {
           await loadData();
         } catch (error) {
           showToast(`Falha na sincronização: ${error.message}`);
+          await loadData();
         } finally {
           button.disabled = false;
         }

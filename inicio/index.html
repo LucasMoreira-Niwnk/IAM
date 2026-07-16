@@ -65,7 +65,11 @@
               <input id="global-search" type="search" placeholder="Buscar usuário ou grupo do AD" />
             </label>
             <div class="search-results" id="global-search-results" aria-label="Resultados da busca global"></div>
-            <button class="icon-button" type="button" title="Notificações" aria-label="Notificações">!</button>
+            <button class="icon-button notification-button" type="button" id="notification-button" title="Notificações" aria-label="Notificações">
+              !
+              <span class="notification-count" id="notification-count">0</span>
+            </button>
+            <div class="notification-panel" id="notification-panel" aria-label="Notificações"></div>
             <div class="user-menu" id="user-menu">
               <div class="user-summary">
                 <span class="user-avatar" id="current-user-avatar">U</span>
@@ -119,17 +123,24 @@
             <div class="dashboard-grid">
               <section class="wide-module">
                 <div class="module-header">
-                  <h3>Fila operacional AD</h3>
-                  <button class="text-button" type="button" data-view-link="identities">Abrir identidades</button>
+                  <h3>Últimas alterações no AD</h3>
+                  <button class="text-button" type="button" data-view-link="audit">Abrir auditoria</button>
                 </div>
                 <div class="review-list" id="review-list"></div>
               </section>
 
               <section class="side-module">
                 <div class="module-header">
-                  <h3>Indicadores do diretório</h3>
+                  <h3>Usuários com maior risco</h3>
                 </div>
                 <div class="risk-bars" id="risk-bars"></div>
+              </section>
+
+              <section class="side-module">
+                <div class="module-header">
+                  <h3>Operadores mais ativos</h3>
+                </div>
+                <div class="risk-bars" id="operator-ranking"></div>
               </section>
             </div>
           </div>

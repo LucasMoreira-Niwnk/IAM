@@ -381,6 +381,84 @@ button:disabled {
   border-color: var(--line);
 }
 
+.notification-button {
+  position: relative;
+}
+
+.notification-button.has-notifications {
+  color: #ffffff;
+  background: var(--nav-soft);
+}
+
+.notification-count {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 20px;
+  height: 20px;
+  display: none;
+  place-items: center;
+  padding: 0 5px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  color: #ffffff;
+  background: var(--red);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.notification-button.has-notifications .notification-count {
+  display: grid;
+}
+
+.notification-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 210px;
+  z-index: 20;
+  width: min(380px, calc(100vw - 32px));
+  display: none;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(26, 37, 54, 0.18);
+}
+
+.notification-panel.is-visible {
+  display: grid;
+}
+
+.notification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.notification-header span,
+.notification-item small {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.notification-item {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #e5eaf1;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.notification-item strong {
+  color: var(--ink);
+}
+
 .user-menu {
   min-height: 42px;
   display: flex;
@@ -522,6 +600,10 @@ button:disabled {
   gap: 16px;
 }
 
+.dashboard-grid .wide-module {
+  grid-row: span 2;
+}
+
 .wide-module,
 .side-module {
   padding: 16px;
@@ -645,11 +727,25 @@ button:disabled {
   gap: 8px;
 }
 
+.risk-user {
+  cursor: pointer;
+}
+
+.risk-user:hover {
+  border-color: var(--blue);
+  background: #f8fbff;
+}
+
 .risk-meta {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   font-weight: 700;
+}
+
+.risk-row small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .bar {
@@ -1726,6 +1822,10 @@ td {
 
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-grid .wide-module {
+    grid-row: auto;
   }
 
   .identity-detail-grid {
